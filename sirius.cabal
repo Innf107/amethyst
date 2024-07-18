@@ -26,9 +26,10 @@ source-repository head
 library
   exposed-modules:
       Sirius.Compile
-      Sirius.Lexer
       Sirius.Parser
+      Sirius.Resolve
       Sirius.Syntax
+      Sirius.Util
   other-modules:
       Paths_sirius
   autogen-modules:
@@ -45,14 +46,17 @@ library
       OverloadedRecordDot
       NoFieldSelectors
       DuplicateRecordFields
+      DataKinds
+      TypeFamilies
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing -Werror=incomplete-patterns
   build-depends:
-      array
-    , base >=4.7 && <5
+      base >=4.7 && <5
     , directory
     , filepath
+    , megaparsec
     , mtl
     , relude
+    , vector
   default-language: GHC2021
 
 executable sirius
@@ -73,15 +77,18 @@ executable sirius
       OverloadedRecordDot
       NoFieldSelectors
       DuplicateRecordFields
+      DataKinds
+      TypeFamilies
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing -Werror=incomplete-patterns -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      array
-    , base >=4.7 && <5
+      base >=4.7 && <5
     , directory
     , filepath
+    , megaparsec
     , mtl
     , relude
     , sirius
+    , vector
   default-language: GHC2021
 
 test-suite sirius-test
@@ -103,13 +110,16 @@ test-suite sirius-test
       OverloadedRecordDot
       NoFieldSelectors
       DuplicateRecordFields
+      DataKinds
+      TypeFamilies
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing -Werror=incomplete-patterns -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      array
-    , base >=4.7 && <5
+      base >=4.7 && <5
     , directory
     , filepath
+    , megaparsec
     , mtl
     , relude
     , sirius
+    , vector
   default-language: GHC2021

@@ -1,40 +1,40 @@
 module Main (main) where
 
+import System.IO (hPutStrLn)
 import Relude
-import Data.Text.IO (hPutStrLn)
-import qualified Sirius.Parser as Parser
-import Sirius.Lexer qualified as Lexer
-import qualified Sirius.Compile as Compile
+import Sirius.Compile qualified as Compile
+import Sirius.Parser qualified as Parser
+import Sirius.Resolve qualified as Resolve
 
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath (takeDirectory, (</>))
+import Text.Megaparsec (errorBundlePretty)
 
 main :: IO ()
-main = getArgs >>= \case
-    [siriusFile] -> do
-        contents <- decodeUtf8 <$> readFileLBS siriusFile
-                
-        tokens <- case Lexer.runLexer contents of
-            Left err -> do
-                hPutStrLn stderr ("LEXICAL ERROR: " <> show err)
-                exitFailure
-            Right tokens -> pure tokens
+main =
+    getArgs >>= \case
+        [siriusFile] -> do
+            contents :: Text <- decodeUtf8 <$> readFileLBS siriusFile
 
-        program <- case Parser.runParseM (Parser.parse tokens) of
-            Left err -> do
-                hPutStrLn stderr "PARSE ERROR"
-                exitFailure
-            Right program -> pure program
+            parsedProgram <- case Parser.parse siriusFile contents of
+                Left errorBundle -> do
+                    hPutStrLn stderr (errorBundlePretty errorBundle)
+                    exitFailure
+                Right program -> pure program
 
-        let writeOutput filePath contents = do
-                let path = takeDirectory siriusFile </> "function" </> filePath
+            resolvedProgram <- Resolve.resolve parsedProgram >>= \case
+                Left err -> error (show err)
+                Right program -> pure program
 
-                putStrLn ("Writing function: " <> path)
+            let writeOutput filePath contents = do
+                    let path = takeDirectory siriusFile </> "function" </> filePath
 
-                createDirectoryIfMissing True (takeDirectory path)
-                writeFileText path contents
+                    putStrLn ("Writing function: " <> path)
 
-        Compile.runCompile program writeOutput
-    _ -> do
-        hPutStrLn stderr "usage: sirius <FILE>"
-        exitFailure
+                    createDirectoryIfMissing True (takeDirectory path)
+                    writeFileText path contents
+
+            Compile.runCompile resolvedProgram writeOutput
+        _ -> do
+            hPutStrLn stderr "usage: sirius <FILE>"
+            exitFailure
