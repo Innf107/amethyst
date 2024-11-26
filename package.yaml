@@ -70,6 +70,7 @@ language: GHC2021
 
 default-extensions:
 - NoImplicitPrelude
+- StrictData
 - LambdaCase
 - DerivingStrategies
 - BlockArguments

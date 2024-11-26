@@ -8,10 +8,20 @@ module Sirius.Syntax (
     Declaration (..),
     Command (..),
     GenericArgument (..),
+    ExecuteClause (..),
+    ScoreTarget (..),
+    PlayerName (..),
+    ObjectiveName (..),
+    ScoreRange (..),
+    ScoreComparison (..),
+    AnchorPoint (..),
+    Position (..),
+    Dimension (..),
     Entity (..),
     TargetSelector (..),
     SelectorArgument (..),
     TagProperties (..),
+    ObjectiveProperties (..),
 ) where
 
 import Relude
@@ -31,10 +41,24 @@ data TagProperties = MkTagProperties
     { isLiteral :: Bool
     }
 
+data ObjectiveProperties = MkObjectiveProperties
+    { isLiteral :: Bool
+    }
+
 type TagName :: Pass -> Type
 type family TagName p where
     TagName Parsed = Name Parsed
     TagName Resolved = (Name Resolved, TagProperties)
+
+type ObjectiveName :: Pass -> Type
+type family ObjectiveName p where
+    ObjectiveName Parsed = Name Parsed
+    ObjectiveName Resolved = (Name Resolved, ObjectiveProperties)
+
+type PassSpecific :: Pass -> Type -> Type -> Type
+type family PassSpecific pass parsed resolved where
+    PassSpecific Parsed parsed resolved = parsed
+    PassSpecific Resolved parsed resolved = resolved
 
 data Program (p :: Pass) = MkProgram
     { namespace :: Text
@@ -47,13 +71,64 @@ data Declaration (p :: Pass)
         { tagName :: Text
         , literal :: Bool
         }
+    | DefinePlayer Text
+    | DefineObjective
+        { objectiveName :: PassSpecific p Text (ObjectiveName Resolved)
+        , literal :: Bool
+        }
 
 data Command p
     = GenericCommand Text (Seq (GenericArgument p))
-    | Function (Name p)
+    | FunctionName (Name p)
+    | FunctionLambda (Seq (Command p))
     | TagAdd (Entity p) (TagName p)
     | TagRemove (Entity p) (TagName p)
+    | ExecuteRun (Seq (ExecuteClause p)) (Command p)
+    | ExecuteIf (Seq (ExecuteClause p)) -- TODO
     | Say Text
+
+data ExecuteClause p
+    = QuotedClause Text
+    | Align Void -- TODO
+    | Anchored AnchorPoint
+    | As (Entity p)
+    | At (Entity p)
+    | Facing Position
+    | FacingEntity (Entity p) AnchorPoint
+    | IfBiome Void -- TODO
+    | IfBlock Void -- TODO
+    | IfBlocks Void -- TODO
+    | IfData Void -- TODO
+    | IfScoreMatches (ScoreTarget p) (ObjectiveName p) ScoreRange
+    | IfScore (ScoreTarget p) (ObjectiveName p) ScoreComparison (ScoreTarget p) (ObjectiveName p)
+    | In Dimension
+    | On Void -- TODO (but really interesting)
+    | PositionedAs (Entity p)
+    | PositionedOver Void -- TODO
+    | Positioned Position
+    | RotatedAs (Entity p)
+    | Rotated Void -- TODO (position but with only two coordinates)
+    | Store Void -- TODO (important)
+    | Summon Text
+    | Unless Void -- TODO
+
+data ScoreComparison = LT | LE | EQ | GE | GT
+
+data ScoreTarget p
+    = EntityScore (Entity p)
+    | PlayerScore PlayerName
+
+data PlayerName
+    = PlayerName Text
+    | QuotedPlayer Text
+
+data ScoreRange = MkScoreRange Integer Integer
+
+data Dimension = Overworld | Nether | End
+
+data AnchorPoint = Eyes | Feet
+
+data Position
 
 data Entity p
     = QuotedEntity Text

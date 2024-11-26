@@ -1,11 +1,12 @@
 module Sirius.Parser (Sirius.Parser.parse) where
 
-import Relude hiding (many)
+import Relude hiding (Ordering (..), many)
 
 import Sirius.Syntax
 
 -- we need to override spaces to allow comments so we hide space to avoid accidentally calling the wrong function
 
+import Data.Sequence ((|>))
 import Relude.Unsafe (read)
 import Text.Megaparsec as Megaparsec hiding (ParseError)
 import Text.Megaparsec.Char as Char hiding (
@@ -104,9 +105,20 @@ declaration :: Parser (Declaration Parsed)
 declaration =
     label "declaration"
         $ choice @[]
-            [ defineTag
-            , defineFunction
+            [ defineFunction
+            , defineTag
+            , definePlayer
+            , defineObjective
             ]
+
+defineFunction :: Parser (Declaration Parsed)
+defineFunction = do
+    keyword "function"
+    name <- ident
+    lbrace
+    commands <- command `sepByTrailing` semi
+    rbrace
+    pure (DefineFunction name (fromList commands))
 
 defineTag :: Parser (Declaration Parsed)
 defineTag = do
@@ -115,13 +127,18 @@ defineTag = do
     literal <- option False (keyword "literal" *> pure True)
     pure $ DefineTag name literal
 
-defineFunction :: Parser (Declaration Parsed)
-defineFunction = do
+definePlayer :: Parser (Declaration Parsed)
+definePlayer = do
+    keyword "player"
     name <- ident
-    lbrace
-    commands <- command `sepByTrailing` semi
-    rbrace
-    pure (DefineFunction name (fromList commands))
+    pure $ DefinePlayer name
+
+defineObjective :: Parser (Declaration Parsed)
+defineObjective = do
+    keyword "objective"
+    name <- ident
+    literal <- option False (keyword "literal" *> pure True)
+    pure $ DefineObjective name literal
 
 command :: Parser (Command Parsed)
 command = label "command" do
@@ -129,14 +146,18 @@ command = label "command" do
         [ functionCommand
         , tagCommand
         , sayCommand
+        , executeCommand
         , genericCommand
         ]
 
 functionCommand :: Parser (Command Parsed)
 functionCommand = do
     keyword "function"
-    functionName <- name
-    pure (Function functionName)
+
+    choice @[]
+        [ FunctionName <$> name
+        , FunctionLambda <$> lambda
+        ]
 
 tagCommand :: Parser (Command Parsed)
 tagCommand = do
@@ -153,6 +174,112 @@ sayCommand = do
     message <- quoted
     pure (Say message)
 
+executeCommand :: Parser (Command Parsed)
+executeCommand = do
+    keyword "execute"
+    [] & fix \recurse clauses ->
+        choice @[]
+            [ keyword "run" >> ExecuteRun clauses <$> command
+            , do
+                clause <- executeClause
+                recurse (clauses |> clause)
+            ]
+
+executeClause :: Parser (ExecuteClause Parsed)
+executeClause = do
+    choice @[]
+        [ QuotedClause <$> quoted
+        , keyword "anchored" >> Anchored <$> anchorPoint
+        , keyword "as" >> As <$> entity
+        , keyword "at" >> As <$> entity
+        , keyword "facing"
+            >> choice @[]
+                [ keyword "entity" >> FacingEntity <$> entity <*> anchorPoint
+                , Facing <$> position
+                ]
+        , keyword "if" >> executeIfClause
+        , keyword "in" >> In <$> dimension
+        , keyword "positioned"
+            >> choice @[]
+                [ keyword "as" >> PositionedAs <$> entity
+                , Positioned <$> position
+                ]
+        , keyword "rotated"
+            >> choice @[]
+                [ keyword "as" >> RotatedAs <$> entity
+                ]
+        , keyword "summon" >> Summon <$> quoted
+        ]
+
+executeIfClause :: Parser (ExecuteClause Parsed)
+executeIfClause =
+    choice @[]
+        [ keyword "biome" >> undefined
+        , keyword "block" >> undefined
+        , keyword "blocks" >> undefined
+        , keyword "data" >> undefined
+        , keyword "score" >> do
+            target1 <- scoreTarget
+            objective1 <- name
+            choice @[]
+                [ "matches" >> do
+                    range <- scoreRange
+                    pure (IfScoreMatches target1 objective1 range)
+                , do
+                    comparison <-
+                        choice @[]
+                            [ keyword "<=" $> LE
+                            , keyword "<" $> LT
+                            , keyword "=" $> EQ
+                            , keyword ">=" $> GE
+                            , keyword ">" $> GT
+                            ]
+                    target2 <- scoreTarget
+                    objective2 <- name
+                    pure (IfScore target1 objective1 comparison target2 objective2)
+                ]
+        ]
+
+scoreTarget :: Parser (ScoreTarget Parsed)
+scoreTarget =
+    choice @[]
+        [ PlayerScore <$> playerName
+        , EntityScore <$> entity
+        ]
+
+playerName :: Parser PlayerName
+playerName =
+    choice @[]
+        [ QuotedPlayer <$> quoted
+        , PlayerName <$> ident
+        ]
+
+scoreRange :: Parser ScoreRange
+scoreRange = do
+    start <- integer
+    end <- optional $ try $ keyword ".." >> integer
+    case end of
+        Just end -> pure $ MkScoreRange start end
+        Nothing -> pure $ MkScoreRange start start
+
+dimension :: Parser Dimension
+dimension =
+    choice @[]
+        [ keyword "minecraft:overworld" *> pure Overworld
+        , keyword "minecraft:nether" *> pure Nether
+        , keyword "minecraft:end" *> pure End
+        ]
+
+anchorPoint :: Parser AnchorPoint
+anchorPoint =
+    choice @[]
+        [ keyword "feet" *> pure Feet
+        , keyword "eyes" *> pure Eyes
+        ]
+
+position :: Parser Position
+position = undefined
+
 genericCommand :: Parser (Command Parsed)
 genericCommand = do
     command <- quoted
@@ -166,12 +293,15 @@ genericArgument =
         , GenericEntity <$> entity
         , Int <$> integer
         , Named <$> name
-        , do
-            lbrace
-            commands <- command `sepByTrailing` semi
-            rbrace
-            pure (Lambda (fromList commands))
+        , Lambda <$> lambda
         ]
+
+lambda :: Parser (Seq (Command Parsed))
+lambda = do
+    lbrace
+    commands <- command `sepByTrailing` semi
+    rbrace
+    pure (fromList commands)
 
 name :: Parser (Name Parsed)
 name = label "name" do

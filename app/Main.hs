@@ -27,12 +27,10 @@ main =
                 Right program -> pure program
 
             let writeOutput filePath contents = do
-                    let path = takeDirectory siriusFile </> "function" </> filePath
+                    putStrLn ("Writing function: " <> filePath)
 
-                    putStrLn ("Writing function: " <> path)
-
-                    createDirectoryIfMissing True (takeDirectory path)
-                    writeFileText path contents
+                    createDirectoryIfMissing True (takeDirectory filePath)
+                    writeFileText filePath contents
 
             Compile.runCompile resolvedProgram writeOutput
         _ -> do

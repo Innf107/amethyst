@@ -38,6 +38,7 @@ library
       src
   default-extensions:
       NoImplicitPrelude
+      StrictData
       LambdaCase
       DerivingStrategies
       BlockArguments
@@ -69,6 +70,7 @@ executable sirius
       app
   default-extensions:
       NoImplicitPrelude
+      StrictData
       LambdaCase
       DerivingStrategies
       BlockArguments
@@ -102,6 +104,7 @@ test-suite sirius-test
       test
   default-extensions:
       NoImplicitPrelude
+      StrictData
       LambdaCase
       DerivingStrategies
       BlockArguments
