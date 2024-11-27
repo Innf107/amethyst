@@ -81,3 +81,4 @@ default-extensions:
 - DuplicateRecordFields
 - DataKinds
 - TypeFamilies
+- RecordWildCards

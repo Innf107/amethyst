@@ -65,14 +65,16 @@ compileDeclaration :: Declaration Resolved -> Compile ()
 compileDeclaration = \case
     DefineFunction name commands -> do
         namespace <- currentNamespace
-        compileFunction (NamespacedName namespace name) commands
+        compileNewFunction (NamespacedName namespace name) commands
     DefineTag{} -> pure ()
     DefinePlayer{} -> pure ()
     DefineObjective{objectiveName} -> do
         emitInitCommand ("scoreboard objectives add " <> renderObjectiveName objectiveName <> " dummy")
+    DefineSearchTree{} -> do
+        undefined
 
-compileFunction :: Name Resolved -> Seq (Command Resolved) -> Compile ()
-compileFunction name commands = do
+compileNewFunction :: Name Resolved -> Seq (Command Resolved) -> Compile ()
+compileNewFunction name commands = do
     commandTexts <- traverse compileCommand commands
     emitNamespacedFile ("function" </> toString name.name <> ".mcfunction") (Text.intercalate "\n" (toList commandTexts))
 
@@ -81,10 +83,7 @@ compileCommand = \case
     GenericCommand name arguments -> do
         argumentTexts <- traverse compileGenericArgument arguments
         pure (unwords (toList (name <| argumentTexts)))
-    FunctionName name ->
-        pure $ "function " <> renderName name
-    FunctionLambda commands ->
-        ("function " <>) <$> compileLambda commands
+    Function function -> ("function " <>) <$> compileFunction function
     TagAdd entity tagName -> do
         entityText <- compileEntity entity
         pure $ "tag " <> entityText <> " add " <> renderTagName tagName
@@ -96,7 +95,12 @@ compileCommand = \case
         clauses <- traverse compileExecuteClause clauses
         command <- compileCommand command
         pure $ "execute " <> Text.intercalate " " (toList (clauses <> ["run " <> command]))
-    ExecuteIf{} -> undefined
+    ExecuteIf clauses -> do
+        clauses <- traverse compileExecuteClause clauses
+        pure $ "execute " <> Text.intercalate " " (toList clauses)
+    ReturnValue staged -> ("return " <>) <$> compileStaged staged
+    ReturnRun command -> ("return run " <>) <$> compileCommand command
+    ReturnFail -> pure "return fail"
 
 compileExecuteClause :: ExecuteClause Resolved -> Compile Text
 compileExecuteClause = \case
@@ -108,9 +112,13 @@ compileExecuteClause = \case
     FacingEntity entity anchorPoint -> do
         entity <- compileEntity entity
         pure ("facing entity " <> entity <> " " <> renderAnchorPoint anchorPoint)
+    IfEntity entity -> do
+        entity <- compileEntity entity
+        pure ("if entity " <> entity)
+    IfFunction function -> ("if function " <>) <$> compileFunction function
     IfScoreMatches target objective range -> do
         target <- compileScoreTarget target
-        range <- compileScoreRange range
+        range <- compileRange range
         pure ("if score " <> target <> " " <> renderObjectiveName objective <> " matches " <> range)
     IfScore target1 objective1 comparison target2 objective2 -> do
         target1 <- compileScoreTarget target1
@@ -139,13 +147,26 @@ compileExecuteClause = \case
     RotatedAs entity -> ("rotated as " <>) <$> compileEntity entity
     Summon text -> pure $ "summon " <> text
 
+compileFunction :: Function Resolved -> Compile Text
+compileFunction = \case
+    FunctionName name -> pure $ renderName name
+    FunctionLambda commands -> compileLambda commands
+
 compileScoreTarget :: ScoreTarget Resolved -> Compile Text
 compileScoreTarget = \case
     EntityScore entity -> compileEntity entity
     PlayerScore playerName -> pure (renderPlayerName playerName)
 
-compileScoreRange :: ScoreRange -> Compile Text
-compileScoreRange (MkScoreRange start end) = pure $ show start <> ".." <> show end
+compileRange :: Range Resolved -> Compile Text
+compileRange (MkRange start end) = do
+    start <- compileStaged start
+    end <- compileStaged end
+    pure $ show start <> ".." <> show end
+
+compileStaged :: Staged Resolved -> Compile Text
+compileStaged = \case
+    StagedInt int -> pure $ show int
+    StagedVar _ -> undefined
 
 renderDimension :: Dimension -> Text
 renderDimension = \case
@@ -173,7 +194,7 @@ compileGenericArgument = \case
 compileLambda :: Seq (Command Resolved) -> Compile Text
 compileLambda commands = do
     name <- freshName "generated/f"
-    compileFunction name commands
+    compileNewFunction name commands
     pure $ renderName name
 
 compileEntity :: Entity Resolved -> Compile Text
@@ -198,6 +219,9 @@ compileTargetSelector = \case
 compileSelectorArgument :: SelectorArgument Resolved -> Compile Text
 compileSelectorArgument = \case
     TagSelector name -> pure $ "tag = " <> renderTagName name
+    DistanceSelector range -> do
+        range <- compileRange range
+        pure $ "distance = " <> range
     GenericSelector selectorName argument -> do
         argument <- compileGenericArgument argument
         pure (selectorName <> " = " <> argument)

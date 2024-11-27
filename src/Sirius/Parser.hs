@@ -46,7 +46,7 @@ sepByTrailing parser separator = fix \recurse -> do
         ]
 
 spaces :: Parser ()
-spaces = do
+spaces = hidden do
     Char.space
     option () $ label "comment" do
         _ <- chunk "//"
@@ -84,6 +84,7 @@ integer = do
     spaces
     negative <- optional (chunk "-")
     digits <- many1 digitChar
+    spaces
     case negative of
         Nothing -> pure (read digits)
         Just _ -> pure (-(read digits))
@@ -109,6 +110,7 @@ declaration =
             , defineTag
             , definePlayer
             , defineObjective
+            , defineSearchTree
             ]
 
 defineFunction :: Parser (Declaration Parsed)
@@ -140,6 +142,26 @@ defineObjective = do
     literal <- option False (keyword "literal" *> pure True)
     pure $ DefineObjective name literal
 
+defineSearchTree :: Parser (Declaration Parsed)
+defineSearchTree = do
+    keyword "search_tree"
+    functionName <- ident
+    keyword "("
+    rangeStart <- staged
+    keyword ","
+    rangeEnd <- staged
+    keyword ","
+    target <- scoreTarget
+    keyword ","
+    objective <- name
+    keyword ","
+    varName <- ident
+    keyword ")"
+    lbrace
+    body <- fmap fromList $ command `sepByTrailing` semi
+    rbrace
+    pure $ DefineSearchTree{name = functionName, rangeStart, rangeEnd, target, varName, objective, body}
+
 command :: Parser (Command Parsed)
 command = label "command" do
     choice @[]
@@ -147,13 +169,17 @@ command = label "command" do
         , tagCommand
         , sayCommand
         , executeCommand
+        , returnCommand
         , genericCommand
         ]
 
 functionCommand :: Parser (Command Parsed)
 functionCommand = do
     keyword "function"
+    Function <$> function
 
+function :: Parser (Function Parsed)
+function =
     choice @[]
         [ FunctionName <$> name
         , FunctionLambda <$> lambda
@@ -218,12 +244,18 @@ executeIfClause =
         , keyword "block" >> undefined
         , keyword "blocks" >> undefined
         , keyword "data" >> undefined
+        , keyword "entity" >> do
+            target <- entity
+            pure (IfEntity target)
+        , keyword "function" >> do
+            target <- function
+            pure (IfFunction target)
         , keyword "score" >> do
             target1 <- scoreTarget
             objective1 <- name
             choice @[]
                 [ "matches" >> do
-                    range <- scoreRange
+                    range <- range
                     pure (IfScoreMatches target1 objective1 range)
                 , do
                     comparison <-
@@ -240,6 +272,19 @@ executeIfClause =
                 ]
         ]
 
+returnCommand :: Parser (Command Parsed)
+returnCommand = do
+    keyword "return"
+    choice @[]
+        [ keyword "run" >> do
+            command <- command
+            pure (ReturnRun command)
+        , keyword "fail" >> pure ReturnFail
+        , do
+            value <- staged
+            pure (ReturnValue value)
+        ]
+
 scoreTarget :: Parser (ScoreTarget Parsed)
 scoreTarget =
     choice @[]
@@ -254,13 +299,20 @@ playerName =
         , PlayerName <$> ident
         ]
 
-scoreRange :: Parser ScoreRange
-scoreRange = do
-    start <- integer
-    end <- optional $ try $ keyword ".." >> integer
+range :: Parser (Range Parsed)
+range = do
+    start <- staged
+    end <- optional $ try $ keyword ".." >> staged
     case end of
-        Just end -> pure $ MkScoreRange start end
-        Nothing -> pure $ MkScoreRange start start
+        Just end -> pure $ MkRange start end
+        Nothing -> pure $ MkRange start start
+
+staged :: Parser (Staged Parsed)
+staged =
+    choice @[]
+        [ StagedInt <$> integer
+        , StagedVar <$> ident
+        ]
 
 dimension :: Parser Dimension
 dimension =
@@ -362,6 +414,7 @@ selectorArgument = do
 
     choice @[]
         [ simple "tag" name TagSelector
+        , simple "distance" range DistanceSelector
         , do
             tagName <- ident <|> quoted
             keyword "="

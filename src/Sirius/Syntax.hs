@@ -7,12 +7,15 @@ module Sirius.Syntax (
     Program (..),
     Declaration (..),
     Command (..),
+    Function(..),
     GenericArgument (..),
     ExecuteClause (..),
     ScoreTarget (..),
     PlayerName (..),
+    Staged(..),
+    StagedType(..),
     ObjectiveName (..),
-    ScoreRange (..),
+    Range (..),
     ScoreComparison (..),
     AnchorPoint (..),
     Position (..),
@@ -76,16 +79,27 @@ data Declaration (p :: Pass)
         { objectiveName :: PassSpecific p Text (ObjectiveName Resolved)
         , literal :: Bool
         }
+    | DefineSearchTree
+        { name :: Text
+        , rangeStart :: Staged p
+        , rangeEnd :: Staged p
+        , target :: ScoreTarget p
+        , objective :: ObjectiveName p
+        , varName :: Text
+        , body :: Seq (Command p)
+        }
 
 data Command p
     = GenericCommand Text (Seq (GenericArgument p))
-    | FunctionName (Name p)
-    | FunctionLambda (Seq (Command p))
+    | Function (Function p)
     | TagAdd (Entity p) (TagName p)
     | TagRemove (Entity p) (TagName p)
     | ExecuteRun (Seq (ExecuteClause p)) (Command p)
     | ExecuteIf (Seq (ExecuteClause p)) -- TODO
     | Say Text
+    | ReturnValue (Staged p)
+    | ReturnFail
+    | ReturnRun (Command p)
 
 data ExecuteClause p
     = QuotedClause Text
@@ -99,7 +113,9 @@ data ExecuteClause p
     | IfBlock Void -- TODO
     | IfBlocks Void -- TODO
     | IfData Void -- TODO
-    | IfScoreMatches (ScoreTarget p) (ObjectiveName p) ScoreRange
+    | IfEntity (Entity p)
+    | IfFunction (Function p)
+    | IfScoreMatches (ScoreTarget p) (ObjectiveName p) (Range p)
     | IfScore (ScoreTarget p) (ObjectiveName p) ScoreComparison (ScoreTarget p) (ObjectiveName p)
     | In Dimension
     | On Void -- TODO (but really interesting)
@@ -112,6 +128,10 @@ data ExecuteClause p
     | Summon Text
     | Unless Void -- TODO
 
+data Function p
+    = FunctionName (Name p)
+    | FunctionLambda (Seq (Command p))
+
 data ScoreComparison = LT | LE | EQ | GE | GT
 
 data ScoreTarget p
@@ -122,7 +142,13 @@ data PlayerName
     = PlayerName Text
     | QuotedPlayer Text
 
-data ScoreRange = MkScoreRange Integer Integer
+data Staged p
+    = StagedInt Integer
+    | StagedVar Text
+
+data StagedType = IntT | AnyT
+
+data Range p = MkRange (Staged p) (Staged p)
 
 data Dimension = Overworld | Nether | End
 
@@ -144,6 +170,7 @@ data TargetSelector
 
 data SelectorArgument p
     = TagSelector (TagName p)
+    | DistanceSelector (Range p)
     | GenericSelector Text (GenericArgument p)
 
 data GenericArgument :: Pass -> Type where

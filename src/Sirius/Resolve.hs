@@ -22,6 +22,7 @@ data Env = MkEnv
     , functions :: Map Text (Name Resolved)
     , players :: Set Text
     , objectives :: Map Text (Name Resolved, ObjectiveProperties)
+    , staged :: Map Text StagedType
     }
 
 -- TODO: accumulate more than one error if possible
@@ -38,6 +39,7 @@ resolve program = runResolve $ resolveProgram emptyEnv program
             , functions = mempty
             , players = mempty
             , objectives = mempty
+            , staged = mempty
             }
 
 runResolve :: Resolve a -> IO (Either ResolutionError a)
@@ -80,19 +82,28 @@ resolveDeclaration env = \case
         newName <- makeNamespaced env objectiveName
         let properties = MkObjectiveProperties{isLiteral = literal}
         let envWithObjective = env{objectives = insert objectiveName (newName, properties) env.objectives}
-        pure (envWithObjective, DefineObjective{objectiveName=(newName, properties), literal})
+        pure (envWithObjective, DefineObjective{objectiveName = (newName, properties), literal})
+    DefineSearchTree{name, rangeStart, rangeEnd, target, objective, varName, body} -> do
+        rangeStart <- resolveStaged env IntT rangeStart
+        rangeEnd <- resolveStaged env IntT rangeEnd
+        target <- resolveScoreTarget env target
+        objective <- resolveObjective env objective
+
+        functionName <- makeNamespaced env name
+        let envWithFunction = env{functions = insert name functionName env.functions}
+
+        -- We do allow the search tree body to mention itself
+        let innerEnv = envWithFunction{staged = insert varName IntT envWithFunction.staged}
+        body <- traverse (resolveCommand innerEnv) body
+
+        pure (envWithFunction, DefineSearchTree{..})
 
 resolveCommand :: Env -> Command Parsed -> Resolve (Command Resolved)
 resolveCommand env = \case
     GenericCommand command arguments -> do
         arguments <- traverse (resolveGenericArgument env) arguments
         pure (GenericCommand command arguments)
-    FunctionName name -> do
-        functionName <- resolveFunction env name
-        pure (FunctionName functionName)
-    FunctionLambda commands -> do
-        commands <- traverse (resolveCommand env) commands
-        pure (FunctionLambda commands)
+    Function function -> Function <$> resolveFunction env function
     TagAdd entity tagName -> do
         entity <- resolveEntity env entity
         tagName <- resolveTagName env tagName
@@ -106,7 +117,12 @@ resolveCommand env = \case
         clauses <- traverse (resolveExecuteClause env) clauses
         command <- resolveCommand env command
         pure (ExecuteRun clauses command)
-    ExecuteIf _ -> undefined
+    ExecuteIf clauses -> do
+        clauses <- traverse (resolveExecuteClause env) clauses
+        pure (ExecuteIf clauses)
+    ReturnValue staged -> ReturnValue <$> resolveStaged env IntT staged
+    ReturnFail -> pure ReturnFail
+    ReturnRun command -> ReturnRun <$> resolveCommand env command
 
 resolveExecuteClause :: Env -> ExecuteClause Parsed -> Resolve (ExecuteClause Resolved)
 resolveExecuteClause env = \case
@@ -122,19 +138,28 @@ resolveExecuteClause env = \case
     PositionedAs entity -> PositionedAs <$> resolveEntity env entity
     RotatedAs entity -> RotatedAs <$> resolveEntity env entity
     Summon text -> pure (Summon text)
+    IfEntity entity -> do
+        entity <- resolveEntity env entity
+        pure (IfEntity entity)
+    IfFunction functionName -> do
+        functionName <- resolveFunction env functionName
+        pure (IfFunction functionName)
     IfScoreMatches target objective range ->
         IfScoreMatches
             <$> resolveScoreTarget env target
             <*> resolveObjective env objective
-            <*> pure range
-    IfScore target1 objective1 comparison target2 objective2 ->
-        undefined
+            <*> resolveRange env range
+    IfScore target1 objective1 comparison target2 objective2 -> do
+        target1 <- resolveScoreTarget env target1
+        objective1 <- resolveObjective env objective1
+        target2 <- resolveScoreTarget env target2
+        objective2 <- resolveObjective env objective2
+        pure (IfScore target1 objective1 comparison target2 objective2)
 
 resolveScoreTarget :: Env -> ScoreTarget Parsed -> Resolve (ScoreTarget Resolved)
 resolveScoreTarget env = \case
     EntityScore entity -> EntityScore <$> resolveEntity env entity
     PlayerScore playerName -> PlayerScore <$> resolvePlayerName env playerName
-
 
 resolveEntity :: Env -> Entity Parsed -> Resolve (Entity Resolved)
 resolveEntity env = \case
@@ -147,6 +172,7 @@ resolveSelectorArgument :: Env -> SelectorArgument Parsed -> Resolve (SelectorAr
 resolveSelectorArgument env = \case
     GenericSelector name argument -> GenericSelector name <$> resolveGenericArgument env argument
     TagSelector name -> TagSelector <$> resolveTagName env name
+    DistanceSelector range -> DistanceSelector <$> resolveRange env range
 
 resolveGenericArgument :: Env -> GenericArgument Parsed -> Resolve (GenericArgument Resolved)
 resolveGenericArgument env = \case
@@ -165,8 +191,28 @@ resolveGenericArgument env = \case
                 Just functionName -> pure (Named (functionName))
                 Nothing -> throwError (UndefinedGeneric name)
 
-resolveFunction :: Env -> Name Parsed -> Resolve (Name Resolved)
+resolveRange :: Env -> Range Parsed -> Resolve (Range Resolved)
+resolveRange env (MkRange start end) =
+    MkRange <$> resolveStaged env IntT start <*> resolveStaged env IntT end
+
+resolveStaged :: Env -> StagedType -> Staged Parsed -> Resolve (Staged Resolved)
+resolveStaged env expectedType = \case
+    StagedInt int -> do
+        assertSubtype IntT expectedType
+        pure $ StagedInt int
+    StagedVar name -> case lookup name env.staged of
+        Nothing -> undefined
+        Just actualType -> do
+            assertSubtype actualType expectedType
+            pure (StagedVar name)
+
+resolveFunction :: Env -> Function Parsed -> Resolve (Function Resolved)
 resolveFunction env = \case
+    FunctionName name -> FunctionName <$> resolveFunctionName env name
+    FunctionLambda commands -> FunctionLambda <$> traverse (resolveCommand env) commands
+
+resolveFunctionName :: Env -> Name Parsed -> Resolve (Name Resolved)
+resolveFunctionName env = \case
     RawName raw -> pure $ RawName raw
     NamespacedName{} -> undefined
     LocalName name -> case lookup name env.functions of
@@ -195,3 +241,8 @@ resolvePlayerName env playerName = case playerName of
     PlayerName playerName -> case lookup playerName env.players of
         Nothing -> throwError (UndefinedPlayer playerName)
         Just playerName -> pure (PlayerName playerName)
+
+assertSubtype :: StagedType -> StagedType -> Resolve ()
+assertSubtype AnyT _ = pure ()
+assertSubtype IntT IntT = pure ()
+assertSubtype IntT AnyT = undefined
