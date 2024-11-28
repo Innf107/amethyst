@@ -197,7 +197,7 @@ tagCommand = do
 sayCommand :: Parser (Command Parsed)
 sayCommand = do
     keyword "say"
-    message <- quoted
+    message <- staged
     pure (Say message)
 
 executeCommand :: Parser (Command Parsed)
@@ -312,6 +312,7 @@ staged =
     choice @[]
         [ StagedInt <$> integer
         , StagedVar <$> ident
+        , StagedQuote <$> quoted
         ]
 
 dimension :: Parser Dimension

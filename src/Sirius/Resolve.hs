@@ -14,6 +14,7 @@ data ResolutionError
     | UndefinedPlayer Text
     | UndefinedObjective Text
     | UndefinedGeneric Text
+    | NonSubtype StagedType StagedType
     deriving (Show)
 
 data Env = MkEnv
@@ -112,7 +113,7 @@ resolveCommand env = \case
         entity <- resolveEntity env entity
         tagName <- resolveTagName env tagName
         pure (TagRemove entity tagName)
-    Say message -> pure (Say message)
+    Say message -> Say <$> resolveStaged env AnyT message
     ExecuteRun clauses command -> do
         clauses <- traverse (resolveExecuteClause env) clauses
         command <- resolveCommand env command
@@ -205,6 +206,8 @@ resolveStaged env expectedType = \case
         Just actualType -> do
             assertSubtype actualType expectedType
             pure (StagedVar name)
+    -- quoted values have type any
+    StagedQuote quote -> pure (StagedQuote quote)
 
 resolveFunction :: Env -> Function Parsed -> Resolve (Function Resolved)
 resolveFunction env = \case
@@ -243,6 +246,9 @@ resolvePlayerName env playerName = case playerName of
         Just playerName -> pure (PlayerName playerName)
 
 assertSubtype :: StagedType -> StagedType -> Resolve ()
-assertSubtype AnyT _ = pure ()
-assertSubtype IntT IntT = pure ()
-assertSubtype IntT AnyT = undefined
+assertSubtype type1 type2 = case (type1, type2) of
+    (_, AnyT) -> pure ()
+    (IntT, IntT) -> pure ()
+    (AnyT, IntT) -> throwError (NonSubtype type1 type2)
+
+    

@@ -1,6 +1,7 @@
 module Sirius.Compile (runCompile) where
 
 import Relude hiding (Ordering (..))
+import Relude.Extra
 
 import Sirius.Syntax
 
@@ -14,10 +15,19 @@ data CompileEnv = MkCompileEnv
     { fileWriter :: FilePath -> Text -> IO ()
     , namespace :: Text
     , initializationFileContents :: IORef Text
+    , stagedValues :: Map Text StagedValue
     }
 
 newtype Compile a = MkCompile (ReaderT CompileEnv IO a)
     deriving newtype (Functor, Applicative, Monad)
+
+stagedEnv :: Compile (Map Text StagedValue)
+stagedEnv = MkCompile $ do
+    env <- ask
+    pure env.stagedValues
+
+withStaged :: Text -> StagedValue -> Compile a -> Compile a
+withStaged name value (MkCompile body) = MkCompile $ local (\env -> env{stagedValues = insert name value env.stagedValues}) body
 
 currentNamespace :: Compile Text
 currentNamespace = MkCompile do
@@ -39,6 +49,7 @@ runCompile program fileWriter = do
                 { fileWriter
                 , namespace = program.namespace
                 , initializationFileContents
+                , stagedValues = mempty
                 }
     let (MkCompile readerT) = compile program
 
@@ -46,6 +57,11 @@ runCompile program fileWriter = do
     finalInitFile <- readIORef initializationFileContents
     fileWriter ("data" </> toString program.namespace </> "function/init.mcfunction") finalInitFile
     fileWriter ("data/minecraft/tags/function/load.json") ("{\"values\":[\"" <> program.namespace <> ":init\"]}")
+
+data StagedValue
+    = StagedIntV Integer
+    | StagedQuotedV Text
+    deriving (Show)
 
 emitNamespacedFile :: FilePath -> Text -> Compile ()
 emitNamespacedFile file contents = MkCompile do
@@ -70,13 +86,57 @@ compileDeclaration = \case
     DefinePlayer{} -> pure ()
     DefineObjective{objectiveName} -> do
         emitInitCommand ("scoreboard objectives add " <> renderObjectiveName objectiveName <> " dummy")
-    DefineSearchTree{} -> do
-        undefined
+    DefineSearchTree{name, rangeStart, rangeEnd, target, objective, varName, body} -> do
+        start <- evalStagedInt rangeStart
+        end <- evalStagedInt rangeEnd
+
+        target <- compileScoreTarget target
+        objective <- pure $ renderObjectiveName objective
+
+        namespace <- currentNamespace
+
+        let leafFunctionNameFor value = do
+                (namespace <> ":generated/search_tree/" <> name <> "_" <> show value)
+
+        let functionNameFor start end = do
+                (namespace <> ":generated/search_tree/" <> name <> "_" <> show start <> "_" <> show end)
+
+        -- generate leaf functions
+        for_ @[] [start .. end] \i -> withStaged varName (StagedIntV i) do
+            compileNewFunction (NamespacedName{namespace, name = "generated/search_tree/" <> name <> "_" <> show i}) body
+
+        let go currentStart currentEnd = do
+                let mid :: Integer = floor (fromInteger @Double (currentStart + currentEnd) / 2)
+
+                let code =
+                        Text.unlines
+                            $ concat @[]
+                                [ ["execute if score "
+                                    <> target <> " " <> objective <> " matches " <> show mid <> " run return run function " <> leafFunctionNameFor mid]
+                                , [ "execute if score " <> target <> " " <> objective <> " matches " <> ".." <> show mid <> " run return run function " <> functionNameFor currentStart (mid - 1)
+                                  | currentStart < mid
+                                  ]
+                                , [ "execute if score " <> target <> " " <> objective <> " matches " <> show mid <> ".." <> " run return run function " <> functionNameFor (mid + 1) currentEnd
+                                  | currentEnd > mid
+                                  ]
+                                ]
+
+                if (currentStart == start && currentEnd == end)
+                    then compileNewRawFunction (NamespacedName{namespace, name}) code
+                    else compileNewRawFunction (NamespacedName{namespace, name = "generated/search_tree/" <> name <> "_" <> show currentStart <> "_" <> show currentEnd}) code
+
+                when (currentStart < mid) $ go currentStart (mid - 1)
+                when (currentEnd > mid) $ go (mid + 1) currentEnd
+        go start end
 
 compileNewFunction :: Name Resolved -> Seq (Command Resolved) -> Compile ()
 compileNewFunction name commands = do
     commandTexts <- traverse compileCommand commands
-    emitNamespacedFile ("function" </> toString name.name <> ".mcfunction") (Text.intercalate "\n" (toList commandTexts))
+    compileNewRawFunction name (Text.intercalate "\n" (toList commandTexts))
+
+compileNewRawFunction :: Name Resolved -> Text -> Compile ()
+compileNewRawFunction name commands = do
+    emitNamespacedFile ("function" </> toString name.name <> ".mcfunction") commands
 
 compileCommand :: Command Resolved -> Compile Text
 compileCommand = \case
@@ -90,7 +150,9 @@ compileCommand = \case
     TagRemove entity tagName -> do
         entityText <- compileEntity entity
         pure $ "tag " <> entityText <> " remove " <> renderTagName tagName
-    Say message -> pure $ "say " <> message
+    Say message -> do
+        message <- compileStaged message
+        pure $ "say " <> message
     ExecuteRun clauses command -> do
         clauses <- traverse compileExecuteClause clauses
         command <- compileCommand command
@@ -161,12 +223,17 @@ compileRange :: Range Resolved -> Compile Text
 compileRange (MkRange start end) = do
     start <- compileStaged start
     end <- compileStaged end
-    pure $ show start <> ".." <> show end
+    pure $ start <> ".." <> end
 
 compileStaged :: Staged Resolved -> Compile Text
-compileStaged = \case
-    StagedInt int -> pure $ show int
-    StagedVar _ -> undefined
+compileStaged expression = do
+    value <- evalStaged expression
+    compileStagedValue value
+
+compileStagedValue :: StagedValue -> Compile Text
+compileStagedValue = \case
+    StagedIntV value -> pure $ show value
+    StagedQuotedV value -> pure value
 
 renderDimension :: Dimension -> Text
 renderDimension = \case
@@ -252,3 +319,19 @@ renderPlayerName :: PlayerName -> Text
 renderPlayerName = \case
     QuotedPlayer text -> text
     PlayerName text -> text
+
+evalStaged :: Staged Resolved -> Compile StagedValue
+evalStaged = \case
+    StagedInt int -> pure (StagedIntV int)
+    StagedVar name -> do
+        env <- stagedEnv
+        case lookup name env of
+            Nothing -> error $ "staged variable not found at compile time: " <> show name
+            Just value -> pure value
+    StagedQuote value -> pure $ StagedQuotedV value
+
+evalStagedInt :: (HasCallStack) => Staged Resolved -> Compile Integer
+evalStagedInt staged =
+    evalStaged staged >>= \case
+        StagedIntV value -> pure value
+        stagedValue@(StagedQuotedV _) -> error $ "staged expression should have evaluated to an int but was: " <> show stagedValue

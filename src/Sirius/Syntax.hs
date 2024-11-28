@@ -96,7 +96,7 @@ data Command p
     | TagRemove (Entity p) (TagName p)
     | ExecuteRun (Seq (ExecuteClause p)) (Command p)
     | ExecuteIf (Seq (ExecuteClause p)) -- TODO
-    | Say Text
+    | Say (Staged p)
     | ReturnValue (Staged p)
     | ReturnFail
     | ReturnRun (Command p)
@@ -145,8 +145,9 @@ data PlayerName
 data Staged p
     = StagedInt Integer
     | StagedVar Text
+    | StagedQuote Text
 
-data StagedType = IntT | AnyT
+data StagedType = IntT | AnyT deriving Show
 
 data Range p = MkRange (Staged p) (Staged p)
 
