@@ -3,10 +3,10 @@ module Amethyst.Resolve (resolve) where
 import Relude
 import Relude.Extra
 
-import Control.Monad.Except (MonadError (throwError))
-import Data.Set qualified as Set
 import Amethyst.Syntax
 import Amethyst.Util (mapAccumLM)
+import Control.Monad.Except (MonadError (throwError))
+import Data.Set qualified as Set
 
 data ResolutionError
     = UndefinedFunction Text
@@ -124,6 +124,16 @@ resolveCommand env = \case
     ReturnValue staged -> ReturnValue <$> resolveStaged env IntT staged
     ReturnFail -> pure ReturnFail
     ReturnRun command -> ReturnRun <$> resolveCommand env command
+    ScoreboardPlayersSet target objective value -> do
+        target <- resolveScoreTarget env target
+        objective <- resolveObjective env objective
+        value <- resolveStaged env IntT value
+        pure (ScoreboardPlayersSet target objective value)
+    ScoreboardPlayersAdd target objective value -> do
+        target <- resolveScoreTarget env target
+        objective <- resolveObjective env objective
+        value <- resolveStaged env IntT value
+        pure (ScoreboardPlayersAdd target objective value)
 
 resolveExecuteClause :: Env -> ExecuteClause Parsed -> Resolve (ExecuteClause Resolved)
 resolveExecuteClause env = \case
@@ -250,5 +260,3 @@ assertSubtype type1 type2 = case (type1, type2) of
     (_, AnyT) -> pure ()
     (IntT, IntT) -> pure ()
     (AnyT, IntT) -> throwError (NonSubtype type1 type2)
-
-    

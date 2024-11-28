@@ -100,6 +100,8 @@ data Command p
     | ReturnValue (Staged p)
     | ReturnFail
     | ReturnRun (Command p)
+    | ScoreboardPlayersSet (ScoreTarget p) (ObjectiveName p) (Staged p)
+    | ScoreboardPlayersAdd (ScoreTarget p) (ObjectiveName p) (Staged p)
 
 data ExecuteClause p
     = QuotedClause Text

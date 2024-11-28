@@ -111,8 +111,16 @@ compileDeclaration = \case
                 let code =
                         Text.unlines
                             $ concat @[]
-                                [ ["execute if score "
-                                    <> target <> " " <> objective <> " matches " <> show mid <> " run return run function " <> leafFunctionNameFor mid]
+                                [
+                                    [ "execute if score "
+                                        <> target
+                                        <> " "
+                                        <> objective
+                                        <> " matches "
+                                        <> show mid
+                                        <> " run return run function "
+                                        <> leafFunctionNameFor mid
+                                    ]
                                 , [ "execute if score " <> target <> " " <> objective <> " matches " <> ".." <> show mid <> " run return run function " <> functionNameFor currentStart (mid - 1)
                                   | currentStart < mid
                                   ]
@@ -163,6 +171,16 @@ compileCommand = \case
     ReturnValue staged -> ("return " <>) <$> compileStaged staged
     ReturnRun command -> ("return run " <>) <$> compileCommand command
     ReturnFail -> pure "return fail"
+    ScoreboardPlayersSet target objective value -> do
+        target <- compileScoreTarget target
+        objective <- pure $ renderObjectiveName objective
+        value <- compileStaged value
+        pure $ "scoreboard players set " <> target <> " " <> objective <> " " <> value
+    ScoreboardPlayersAdd target objective value -> do
+        target <- compileScoreTarget target
+        objective <- pure $ renderObjectiveName objective
+        value <- compileStaged value
+        pure $ "scoreboard players add " <> target <> " " <> objective <> " " <> value
 
 compileExecuteClause :: ExecuteClause Resolved -> Compile Text
 compileExecuteClause = \case

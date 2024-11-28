@@ -170,6 +170,7 @@ command = label "command" do
         , sayCommand
         , executeCommand
         , returnCommand
+        , scoreboardCommand
         , genericCommand
         ]
 
@@ -283,6 +284,25 @@ returnCommand = do
         , do
             value <- staged
             pure (ReturnValue value)
+        ]
+
+scoreboardCommand :: Parser (Command Parsed)
+scoreboardCommand = do
+    keyword "scoreboard"
+    choice @[]
+        [ keyword "players"
+            >> choice @[]
+                [ keyword "set" >> do
+                    target <- scoreTarget
+                    objective <- name
+                    value <- staged
+                    pure (ScoreboardPlayersSet target objective value)
+                , keyword "add" >> do
+                    target <- scoreTarget
+                    objective <- name
+                    value <- staged
+                    pure (ScoreboardPlayersAdd target objective value)
+                ]
         ]
 
 scoreTarget :: Parser (ScoreTarget Parsed)
