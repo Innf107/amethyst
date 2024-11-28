@@ -1,4 +1,4 @@
-module Sirius.Util where
+module Amethyst.Util where
 
 import Relude
 

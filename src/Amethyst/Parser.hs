@@ -1,8 +1,8 @@
-module Sirius.Parser (Sirius.Parser.parse) where
+module Amethyst.Parser (Amethyst.Parser.parse) where
 
 import Relude hiding (Ordering (..), many)
 
-import Sirius.Syntax
+import Amethyst.Syntax
 
 -- we need to override spaces to allow comments so we hide space to avoid accidentally calling the wrong function
 

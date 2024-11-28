@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -Wno-partial-fields #-}
 
-module Sirius.Syntax (
+module Amethyst.Syntax (
     Pass (..),
     Name (..),
     TagName,

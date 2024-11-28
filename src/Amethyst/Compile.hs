@@ -1,9 +1,9 @@
-module Sirius.Compile (runCompile) where
+module Amethyst.Compile (runCompile) where
 
 import Relude hiding (Ordering (..))
 import Relude.Extra
 
-import Sirius.Syntax
+import Amethyst.Syntax
 
 import Data.Sequence ((<|))
 import Data.Text qualified as Text

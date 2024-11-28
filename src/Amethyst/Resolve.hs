@@ -1,12 +1,12 @@
-module Sirius.Resolve (resolve) where
+module Amethyst.Resolve (resolve) where
 
 import Relude
 import Relude.Extra
 
 import Control.Monad.Except (MonadError (throwError))
 import Data.Set qualified as Set
-import Sirius.Syntax
-import Sirius.Util (mapAccumLM)
+import Amethyst.Syntax
+import Amethyst.Util (mapAccumLM)
 
 data ResolutionError
     = UndefinedFunction Text

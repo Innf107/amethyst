@@ -1,1 +1,1 @@
-# sirius
+# amethyst

@@ -4,12 +4,12 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 
-name:           sirius
+name:           amethyst
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/sirius#readme>
-homepage:       https://github.com/githubuser/sirius#readme
-bug-reports:    https://github.com/githubuser/sirius/issues
-author:         Author name here
+description:    Please see the README on GitHub at <https://github.com/Innf107/amethyst#readme>
+homepage:       https://github.com/Innf107/amethyst#readme
+bug-reports:    https://github.com/Innf107/amethyst/issues
+author:         welltypedwitch
 maintainer:     example@example.com
 copyright:      2024 Author name here
 license:        BSD-3-Clause
@@ -21,19 +21,19 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/githubuser/sirius
+  location: https://github.com/Innf107/amethyst
 
 library
   exposed-modules:
-      Sirius.Compile
-      Sirius.Parser
-      Sirius.Resolve
-      Sirius.Syntax
-      Sirius.Util
+      Amethyst.Compile
+      Amethyst.Parser
+      Amethyst.Resolve
+      Amethyst.Syntax
+      Amethyst.Util
   other-modules:
-      Paths_sirius
+      Paths_amethyst
   autogen-modules:
-      Paths_sirius
+      Paths_amethyst
   hs-source-dirs:
       src
   default-extensions:
@@ -61,12 +61,12 @@ library
     , vector
   default-language: GHC2021
 
-executable sirius
+executable amethyst
   main-is: Main.hs
   other-modules:
-      Paths_sirius
+      Paths_amethyst
   autogen-modules:
-      Paths_sirius
+      Paths_amethyst
   hs-source-dirs:
       app
   default-extensions:
@@ -85,23 +85,23 @@ executable sirius
       RecordWildCards
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing -Werror=incomplete-patterns -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      amethyst
+    , base >=4.7 && <5
     , directory
     , filepath
     , megaparsec
     , mtl
     , relude
-    , sirius
     , vector
   default-language: GHC2021
 
-test-suite sirius-test
+test-suite amethyst-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      Paths_sirius
+      Paths_amethyst
   autogen-modules:
-      Paths_sirius
+      Paths_amethyst
   hs-source-dirs:
       test
   default-extensions:
@@ -120,12 +120,12 @@ test-suite sirius-test
       RecordWildCards
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing -Werror=incomplete-patterns -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      amethyst
+    , base >=4.7 && <5
     , directory
     , filepath
     , megaparsec
     , mtl
     , relude
-    , sirius
     , vector
   default-language: GHC2021

@@ -2,21 +2,21 @@ module Main (main) where
 
 import System.IO (hPutStrLn)
 import Relude
-import Sirius.Compile qualified as Compile
-import Sirius.Parser qualified as Parser
-import Sirius.Resolve qualified as Resolve
+import Amethyst.Compile qualified as Compile
+import Amethyst.Parser qualified as Parser
+import Amethyst.Resolve qualified as Resolve
 
 import System.Directory (createDirectoryIfMissing)
-import System.FilePath (takeDirectory, (</>))
+import System.FilePath (takeDirectory)
 import Text.Megaparsec (errorBundlePretty)
 
 main :: IO ()
 main =
     getArgs >>= \case
-        [siriusFile] -> do
-            contents :: Text <- decodeUtf8 <$> readFileLBS siriusFile
+        [amethystFile] -> do
+            contents :: Text <- decodeUtf8 <$> readFileLBS amethystFile
 
-            parsedProgram <- case Parser.parse siriusFile contents of
+            parsedProgram <- case Parser.parse amethystFile contents of
                 Left errorBundle -> do
                     hPutStrLn stderr (errorBundlePretty errorBundle)
                     exitFailure
@@ -34,5 +34,5 @@ main =
 
             Compile.runCompile resolvedProgram writeOutput
         _ -> do
-            hPutStrLn stderr "usage: sirius <FILE>"
+            hPutStrLn stderr "usage: amethyst <FILE>"
             exitFailure
