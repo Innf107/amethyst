@@ -303,13 +303,13 @@ compileTargetSelector = \case
 
 compileSelectorArgument :: SelectorArgument Resolved -> Compile Text
 compileSelectorArgument = \case
-    TagSelector name -> pure $ "tag = " <> renderTagName name
+    TagSelector name -> pure $ "tag=" <> renderTagName name
     DistanceSelector range -> do
         range <- compileRange range
-        pure $ "distance = " <> range
+        pure $ "distance=" <> range
     GenericSelector selectorName argument -> do
         argument <- compileGenericArgument argument
-        pure (selectorName <> " = " <> argument)
+        pure (selectorName <> "=" <> argument)
 
 renderName :: Name Resolved -> Text
 renderName = \case

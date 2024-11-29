@@ -218,7 +218,7 @@ executeClause = do
         [ QuotedClause <$> quoted
         , keyword "anchored" >> Anchored <$> anchorPoint
         , keyword "as" >> As <$> entity
-        , keyword "at" >> As <$> entity
+        , keyword "at" >> At <$> entity
         , keyword "facing"
             >> choice @[]
                 [ keyword "entity" >> FacingEntity <$> entity <*> anchorPoint
