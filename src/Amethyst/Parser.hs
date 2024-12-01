@@ -47,7 +47,7 @@ sepByTrailing parser separator = fix \recurse -> do
 
 spaces :: Parser ()
 spaces = hidden do
-    Char.space
+    (Char.space <|> void (oneOf @[] "$"))
     option () $ label "comment" do
         _ <- chunk "//"
         _ <- many (satisfy (/= '\n'))
