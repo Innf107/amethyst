@@ -124,6 +124,10 @@ resolveCommand env = \case
     ReturnValue staged -> ReturnValue <$> resolveStaged env IntT staged
     ReturnFail -> pure ReturnFail
     ReturnRun command -> ReturnRun <$> resolveCommand env command
+    ScoreboardPlayersGet target objective -> do
+        target <- resolveScoreTarget env target
+        objective <- resolveObjective env objective
+        pure (ScoreboardPlayersGet target objective)
     ScoreboardPlayersSet target objective value -> do
         target <- resolveScoreTarget env target
         objective <- resolveObjective env objective

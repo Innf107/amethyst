@@ -47,7 +47,7 @@ sepByTrailing parser separator = fix \recurse -> do
 
 spaces :: Parser ()
 spaces = hidden do
-    (Char.space <|> void (oneOf @[] "$"))
+    Char.space
     option () $ label "comment" do
         _ <- chunk "//"
         _ <- many (satisfy (/= '\n'))
@@ -292,7 +292,11 @@ scoreboardCommand = do
     choice @[]
         [ keyword "players"
             >> choice @[]
-                [ keyword "set" >> do
+                [ keyword "get" >> do
+                    target <- scoreTarget
+                    objective <- name
+                    pure (ScoreboardPlayersGet target objective)
+                , keyword "set" >> do
                     target <- scoreTarget
                     objective <- name
                     value <- staged

@@ -100,6 +100,7 @@ data Command p
     | ReturnValue (Staged p)
     | ReturnFail
     | ReturnRun (Command p)
+    | ScoreboardPlayersGet (ScoreTarget p) (ObjectiveName p)
     | ScoreboardPlayersSet (ScoreTarget p) (ObjectiveName p) (Staged p)
     | ScoreboardPlayersAdd (ScoreTarget p) (ObjectiveName p) (Staged p)
 

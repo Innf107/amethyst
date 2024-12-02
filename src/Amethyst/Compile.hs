@@ -171,6 +171,10 @@ compileCommand = \case
     ReturnValue staged -> ("return " <>) <$> compileStaged staged
     ReturnRun command -> ("return run " <>) <$> compileCommand command
     ReturnFail -> pure "return fail"
+    ScoreboardPlayersGet target objective -> do
+        target <- compileScoreTarget target
+        objective <- pure $ renderObjectiveName objective
+        pure $ "scoreboard players get " <> target <> " " <> objective
     ScoreboardPlayersSet target objective value -> do
         target <- compileScoreTarget target
         objective <- pure $ renderObjectiveName objective
