@@ -190,9 +190,9 @@ compileCommand = \case
         objective1 <- pure $ renderObjectiveName objective1
         operation <- pure $ case operation of
             Assign -> "="
+            Swap -> "><"
             Min -> "<"
             Max -> ">"
-            Swap -> "><"
             Add -> "+="
             Subtract -> "-="
             Multiply -> "*="

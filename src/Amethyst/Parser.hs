@@ -311,7 +311,8 @@ scoreboardCommand = do
                     objective1 <- name
                     operation <-
                         choice @[]
-                            [ keyword "%=" $> Mod
+                            [ keyword "><" $> Swap
+                            , keyword "%=" $> Mod
                             , keyword "*=" $> Multiply
                             , keyword "+=" $> Add
                             , keyword "-=" $> Subtract
@@ -319,7 +320,6 @@ scoreboardCommand = do
                             , keyword "<" $> Min
                             , keyword "=" $> Assign
                             , keyword ">" $> Max
-                            , keyword "><" $> Swap
                             ]
                     target2 <- scoreTarget
                     objective2 <- name
