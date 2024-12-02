@@ -306,6 +306,24 @@ scoreboardCommand = do
                     objective <- name
                     value <- staged
                     pure (ScoreboardPlayersAdd target objective value)
+                , keyword "operation" >> do
+                    target1 <- scoreTarget
+                    objective1 <- name
+                    operation <-
+                        choice @[]
+                            [ keyword "%=" $> Mod
+                            , keyword "*=" $> Multiply
+                            , keyword "+=" $> Add
+                            , keyword "-=" $> Subtract
+                            , keyword "/=" $> Divide
+                            , keyword "<" $> Min
+                            , keyword "=" $> Assign
+                            , keyword ">" $> Max
+                            , keyword "><" $> Swap
+                            ]
+                    target2 <- scoreTarget
+                    objective2 <- name
+                    pure (ScoreboardPlayersOperation target1 objective1 operation target2 objective2)
                 ]
         ]
 

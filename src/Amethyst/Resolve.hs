@@ -138,6 +138,12 @@ resolveCommand env = \case
         objective <- resolveObjective env objective
         value <- resolveStaged env IntT value
         pure (ScoreboardPlayersAdd target objective value)
+    ScoreboardPlayersOperation target1 objective1 operation target2 objective2 -> do
+        target1 <- resolveScoreTarget env target1
+        objective1 <- resolveObjective env objective1
+        target2 <- resolveScoreTarget env target2
+        objective2 <- resolveObjective env objective2
+        pure (ScoreboardPlayersOperation target1 objective1 operation target2 objective2)
 
 resolveExecuteClause :: Env -> ExecuteClause Parsed -> Resolve (ExecuteClause Resolved)
 resolveExecuteClause env = \case

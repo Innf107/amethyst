@@ -7,13 +7,14 @@ module Amethyst.Syntax (
     Program (..),
     Declaration (..),
     Command (..),
-    Function(..),
+    Function (..),
     GenericArgument (..),
+    Operation(..),
     ExecuteClause (..),
     ScoreTarget (..),
     PlayerName (..),
-    Staged(..),
-    StagedType(..),
+    Staged (..),
+    StagedType (..),
     ObjectiveName (..),
     Range (..),
     ScoreComparison (..),
@@ -103,6 +104,18 @@ data Command p
     | ScoreboardPlayersGet (ScoreTarget p) (ObjectiveName p)
     | ScoreboardPlayersSet (ScoreTarget p) (ObjectiveName p) (Staged p)
     | ScoreboardPlayersAdd (ScoreTarget p) (ObjectiveName p) (Staged p)
+    | ScoreboardPlayersOperation (ScoreTarget p) (ObjectiveName p) Operation (ScoreTarget p) (ObjectiveName p)
+
+data Operation
+    = Assign
+    | Min
+    | Max
+    | Swap
+    | Add
+    | Subtract
+    | Multiply
+    | Divide
+    | Mod
 
 data ExecuteClause p
     = QuotedClause Text
@@ -150,7 +163,7 @@ data Staged p
     | StagedVar Text
     | StagedQuote Text
 
-data StagedType = IntT | AnyT deriving Show
+data StagedType = IntT | AnyT deriving (Show)
 
 data Range p = MkRange (Staged p) (Staged p)
 

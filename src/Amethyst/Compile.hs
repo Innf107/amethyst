@@ -185,6 +185,30 @@ compileCommand = \case
         objective <- pure $ renderObjectiveName objective
         value <- compileStaged value
         pure $ "scoreboard players add " <> target <> " " <> objective <> " " <> value
+    ScoreboardPlayersOperation target1 objective1 operation target2 objective2 -> do
+        target1 <- compileScoreTarget target1
+        objective1 <- pure $ renderObjectiveName objective1
+        operation <- pure $ case operation of
+            Assign -> "="
+            Min -> "<"
+            Max -> ">"
+            Swap -> "><"
+            Add -> "+="
+            Subtract -> "-="
+            Multiply -> "*="
+            Divide -> "/="
+            Mod -> "%="
+        target2 <- compileScoreTarget target2
+        objective2 <- pure $ renderObjectiveName objective2
+        pure
+            $ Text.unwords
+                [ "scoreboard players operation"
+                , target1
+                , objective1
+                , operation
+                , target2
+                , objective2
+                ]
 
 compileExecuteClause :: ExecuteClause Resolved -> Compile Text
 compileExecuteClause = \case
