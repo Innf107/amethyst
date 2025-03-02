@@ -9,7 +9,7 @@ module Amethyst.Syntax (
     Command (..),
     Function (..),
     GenericArgument (..),
-    Operation(..),
+    Operation (..),
     ExecuteClause (..),
     IfCondition (..),
     ScoreTarget (..),
@@ -18,6 +18,8 @@ module Amethyst.Syntax (
     StagedType (..),
     ObjectiveName (..),
     Range (..),
+    StoredValue (..),
+    StoreLocation (..),
     ScoreComparison (..),
     AnchorPoint (..),
     Position (..),
@@ -135,8 +137,19 @@ data ExecuteClause p
     | Positioned Position
     | RotatedAs (Entity p)
     | Rotated Void -- TODO (position but with only two coordinates)
-    | Store Void -- TODO (important)
+    | Store StoredValue (StoreLocation p)
     | Summon Text
+
+data StoredValue
+    = Result
+    | Success
+
+data StoreLocation p
+    = StoreBlock Void
+    | StoreBossbar Void
+    | StoreEntity Void
+    | StoreStorage Void
+    | StoreScore (ScoreTarget p) (ObjectiveName p)
 
 data IfCondition p
     = IfBiome Void -- TODO

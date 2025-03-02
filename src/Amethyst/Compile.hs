@@ -230,8 +230,23 @@ compileExecuteClause = \case
     PositionedAs entity -> ("positioned as " <>) <$> compileEntity entity
     Positioned position -> pure $ "positioned " <> renderPosition position
     RotatedAs entity -> ("rotated as " <>) <$> compileEntity entity
+    Store storedValue storeLocation -> do
+        storedValue <- case storedValue of
+            Result -> pure "result"
+            Success -> pure "success"
+        location <- compileStoreLocation storeLocation
+        pure $ "store " <> storedValue <> " " <> location
     Summon text -> pure $ "summon " <> text
 
+compileStoreLocation :: StoreLocation Resolved -> Compile Text
+compileStoreLocation = \case
+    StoreScore target objectiveName -> do
+        target <- compileScoreTarget target
+        let objective = renderObjectiveName objectiveName
+        pure ("score " <> target <> " " <> objective)
+
+
+compileIfCondition :: IfCondition Resolved -> Compile Text
 compileIfCondition = \case
     IfEntity entity -> do
         entity <- compileEntity entity

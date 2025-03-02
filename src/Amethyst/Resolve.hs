@@ -161,6 +161,14 @@ resolveExecuteClause env = \case
     Summon text -> pure (Summon text)
     If condition -> If <$> resolveIfCondition env condition
     Unless condition -> Unless <$> resolveIfCondition env condition
+    Store value location -> Store value <$> resolveStoreLocation env location
+
+resolveStoreLocation :: Env -> StoreLocation 'Parsed -> Resolve (StoreLocation 'Resolved)
+resolveStoreLocation env = \case
+    StoreScore target objective -> do
+        target <- resolveScoreTarget env target
+        objective <- resolveObjective env objective
+        pure (StoreScore target objective)
 
 resolveIfCondition :: Env -> IfCondition Parsed -> Resolve (IfCondition Resolved)
 resolveIfCondition env = \case

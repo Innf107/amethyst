@@ -75,3 +75,4 @@ default-extensions:
 - DataKinds
 - TypeFamilies
 - RecordWildCards
+- PatternSynonyms

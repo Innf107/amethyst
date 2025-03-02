@@ -1,3 +1,5 @@
+{-# LANGUAGE NoOverloadedLists #-}
+
 module Amethyst.Parser (Amethyst.Parser.parse) where
 
 import Relude hiding (Ordering (..), many)
@@ -6,7 +8,7 @@ import Amethyst.Syntax
 
 -- we need to override spaces to allow comments so we hide space to avoid accidentally calling the wrong function
 
-import Data.Sequence ((|>))
+import Data.Sequence ((|>), pattern Empty)
 import Relude.Unsafe (read)
 import Text.Megaparsec as Megaparsec hiding (ParseError)
 import Text.Megaparsec.Char as Char hiding (
@@ -204,13 +206,14 @@ sayCommand = do
 executeCommand :: Parser (Command Parsed)
 executeCommand = do
     keyword "execute"
-    [] & fix \recurse clauses ->
-        choice @[]
-            [ keyword "run" >> ExecuteRun clauses <$> command
-            , do
-                clause <- executeClause
-                recurse (clauses |> clause)
-            ]
+    let subCommand clauses =
+            choice
+                [ keyword "run" >> ExecuteRun clauses <$> command
+                , do
+                    clause <- executeClause
+                    subCommand (clauses |> clause)
+                ]
+    subCommand Empty
 
 executeClause :: Parser (ExecuteClause Parsed)
 executeClause = do
@@ -228,7 +231,7 @@ executeClause = do
         , keyword "unless" >> Unless <$> executeIfClause
         , keyword "in" >> In <$> dimension
         , keyword "positioned"
-            >> choice @[]
+            >> choice
                 [ keyword "as" >> PositionedAs <$> entity
                 , Positioned <$> position
                 ]
@@ -237,6 +240,23 @@ executeClause = do
                 [ keyword "as" >> RotatedAs <$> entity
                 ]
         , keyword "summon" >> Summon <$> quoted
+        , keyword "store" >> do
+            storedValue <-
+                choice
+                    [ keyword "result" >> pure Result
+                    , keyword "success" >> pure Success
+                    ]
+            location <- storeLocation
+            pure (Store storedValue location)
+        ]
+
+storeLocation :: Parser (StoreLocation Parsed)
+storeLocation = do
+    choice [
+        keyword "score" >> do
+            target <- scoreTarget
+            objective <- name
+            pure (StoreScore target objective)
         ]
 
 executeIfClause :: Parser (IfCondition Parsed)
@@ -430,7 +450,7 @@ entity =
     (QuotedEntity <$> quoted)
         <|> do
             target <- targetSelector
-            arguments <- option [] do
+            arguments <- option Empty do
                 keyword "["
                 arguments <- selectorArgument `sepByTrailing` comma
                 keyword "]"
