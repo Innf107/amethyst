@@ -159,6 +159,11 @@ resolveExecuteClause env = \case
     PositionedAs entity -> PositionedAs <$> resolveEntity env entity
     RotatedAs entity -> RotatedAs <$> resolveEntity env entity
     Summon text -> pure (Summon text)
+    If condition -> If <$> resolveIfCondition env condition
+    Unless condition -> Unless <$> resolveIfCondition env condition
+
+resolveIfCondition :: Env -> IfCondition Parsed -> Resolve (IfCondition Resolved)
+resolveIfCondition env = \case
     IfEntity entity -> do
         entity <- resolveEntity env entity
         pure (IfEntity entity)

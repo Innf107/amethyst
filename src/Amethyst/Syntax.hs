@@ -11,6 +11,7 @@ module Amethyst.Syntax (
     GenericArgument (..),
     Operation(..),
     ExecuteClause (..),
+    IfCondition (..),
     ScoreTarget (..),
     PlayerName (..),
     Staged (..),
@@ -125,14 +126,8 @@ data ExecuteClause p
     | At (Entity p)
     | Facing Position
     | FacingEntity (Entity p) AnchorPoint
-    | IfBiome Void -- TODO
-    | IfBlock Void -- TODO
-    | IfBlocks Void -- TODO
-    | IfData Void -- TODO
-    | IfEntity (Entity p)
-    | IfFunction (Function p)
-    | IfScoreMatches (ScoreTarget p) (ObjectiveName p) (Range p)
-    | IfScore (ScoreTarget p) (ObjectiveName p) ScoreComparison (ScoreTarget p) (ObjectiveName p)
+    | If (IfCondition p)
+    | Unless (IfCondition p)
     | In Dimension
     | On Void -- TODO (but really interesting)
     | PositionedAs (Entity p)
@@ -142,7 +137,16 @@ data ExecuteClause p
     | Rotated Void -- TODO (position but with only two coordinates)
     | Store Void -- TODO (important)
     | Summon Text
-    | Unless Void -- TODO
+
+data IfCondition p
+    = IfBiome Void -- TODO
+    | IfBlock Void -- TODO
+    | IfBlocks Void -- TODO
+    | IfData Void -- TODO
+    | IfEntity (Entity p)
+    | IfFunction (Function p)
+    | IfScoreMatches (ScoreTarget p) (ObjectiveName p) (Range p)
+    | IfScore (ScoreTarget p) (ObjectiveName p) ScoreComparison (ScoreTarget p) (ObjectiveName p)
 
 data Function p
     = FunctionName (Name p)

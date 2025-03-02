@@ -224,7 +224,8 @@ executeClause = do
                 [ keyword "entity" >> FacingEntity <$> entity <*> anchorPoint
                 , Facing <$> position
                 ]
-        , keyword "if" >> executeIfClause
+        , keyword "if" >> If <$> executeIfClause
+        , keyword "unless" >> Unless <$> executeIfClause
         , keyword "in" >> In <$> dimension
         , keyword "positioned"
             >> choice @[]
@@ -238,7 +239,7 @@ executeClause = do
         , keyword "summon" >> Summon <$> quoted
         ]
 
-executeIfClause :: Parser (ExecuteClause Parsed)
+executeIfClause :: Parser (IfCondition Parsed)
 executeIfClause =
     choice @[]
         [ keyword "biome" >> undefined

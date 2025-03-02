@@ -220,14 +220,27 @@ compileExecuteClause = \case
     FacingEntity entity anchorPoint -> do
         entity <- compileEntity entity
         pure ("facing entity " <> entity <> " " <> renderAnchorPoint anchorPoint)
+    If condition -> do
+        condition <- compileIfCondition condition
+        pure $ "if " <> condition
+    Unless condition -> do
+        condition <- compileIfCondition condition
+        pure $ "if " <> condition
+    In dimension -> pure $ "in " <> renderDimension dimension
+    PositionedAs entity -> ("positioned as " <>) <$> compileEntity entity
+    Positioned position -> pure $ "positioned " <> renderPosition position
+    RotatedAs entity -> ("rotated as " <>) <$> compileEntity entity
+    Summon text -> pure $ "summon " <> text
+
+compileIfCondition = \case
     IfEntity entity -> do
         entity <- compileEntity entity
-        pure ("if entity " <> entity)
-    IfFunction function -> ("if function " <>) <$> compileFunction function
+        pure ("entity " <> entity)
+    IfFunction function -> ("function " <>) <$> compileFunction function
     IfScoreMatches target objective range -> do
         target <- compileScoreTarget target
         range <- compileRange range
-        pure ("if score " <> target <> " " <> renderObjectiveName objective <> " matches " <> range)
+        pure ("score " <> target <> " " <> renderObjectiveName objective <> " matches " <> range)
     IfScore target1 objective1 comparison target2 objective2 -> do
         target1 <- compileScoreTarget target1
         target2 <- compileScoreTarget target2
@@ -238,7 +251,7 @@ compileExecuteClause = \case
             GE -> ">="
             GT -> ">"
         pure
-            ( "if score "
+            ( "score "
                 <> target1
                 <> " "
                 <> renderObjectiveName objective1
@@ -249,11 +262,6 @@ compileExecuteClause = \case
                 <> " "
                 <> renderObjectiveName objective2
             )
-    In dimension -> pure $ "in " <> renderDimension dimension
-    PositionedAs entity -> ("positioned as " <>) <$> compileEntity entity
-    Positioned position -> pure $ "positioned " <> renderPosition position
-    RotatedAs entity -> ("rotated as " <>) <$> compileEntity entity
-    Summon text -> pure $ "summon " <> text
 
 compileFunction :: Function Resolved -> Compile Text
 compileFunction = \case
