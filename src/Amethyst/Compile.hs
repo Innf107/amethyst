@@ -225,7 +225,7 @@ compileExecuteClause = \case
         pure $ "if " <> condition
     Unless condition -> do
         condition <- compileIfCondition condition
-        pure $ "if " <> condition
+        pure $ "unless " <> condition
     In dimension -> pure $ "in " <> renderDimension dimension
     PositionedAs entity -> ("positioned as " <>) <$> compileEntity entity
     Positioned position -> pure $ "positioned " <> renderPosition position
