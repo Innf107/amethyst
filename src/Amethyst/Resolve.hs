@@ -1,4 +1,6 @@
-module Amethyst.Resolve (resolve) where
+{-# LANGUAGE DerivingVia #-}
+
+module Amethyst.Resolve (resolve, Env, emptyEnv, includeImportedEnv) where
 
 import Relude
 import Relude.Extra
@@ -6,72 +8,104 @@ import Relude.Extra
 import Amethyst.Syntax
 import Amethyst.Util (mapAccumLM)
 import Control.Monad.Except (MonadError (throwError))
+import Data.Map qualified as Map
 import Data.Set qualified as Set
+import GHC.Generics (Generically (..))
 
 data ResolutionError
-    = UndefinedFunction Text
-    | UndefinedTag Text
-    | UndefinedPlayer Text
-    | UndefinedObjective Text
-    | UndefinedGeneric Text
+    = UndefinedFunction
+        { importedNamespace :: Maybe Text
+        , functionName :: Text
+        }
+    | UndefinedTag
+        { importedNamespace :: Maybe Text
+        , tagName :: Text
+        }
+    | UndefinedPlayer
+        { playerName :: Text
+        }
+    | UndefinedObjective
+        { importedNamespace :: Maybe Text
+        , objectiveName :: Text
+        }
+    | UndefinedGeneric
+        { importedNamespace :: Maybe Text
+        , varName :: Text
+        }
     | NonSubtype StagedType StagedType
+    | UndefinedNamespace Text
     deriving (Show)
 
 data Env = MkEnv
-    { namespace :: Text
-    , tags :: Map Text (Name Resolved, TagProperties)
+    { tags :: Map Text (Name Resolved, TagProperties)
     , functions :: Map Text (Name Resolved)
     , players :: Set Text
     , objectives :: Map Text (Name Resolved, ObjectiveProperties)
     , staged :: Map Text StagedType
+    , imported :: Map Text Env
     }
+    deriving stock (Generic)
+    deriving (Semigroup, Monoid) via Generically Env
+
+includeImportedEnv :: Text -> Env -> Env -> Env
+includeImportedEnv namespace toBeIncluded env =
+    env{imported = Map.insertWith (<>) namespace toBeIncluded env.imported}
+
+envForNamespace :: Text -> Env -> Resolve Env
+envForNamespace namespace env =
+    case lookup namespace env.imported of
+        Nothing -> throwError (UndefinedNamespace namespace)
+        Just env -> pure env
+
+emptyEnv =
+    MkEnv
+        { tags = mempty
+        , functions = mempty
+        , players = mempty
+        , objectives = mempty
+        , staged = mempty
+        , imported = mempty
+        }
 
 -- TODO: accumulate more than one error if possible
-newtype Resolve a = MkResolve (ExceptT ResolutionError IO a)
-    deriving (Functor, Applicative, Monad, MonadError ResolutionError)
+newtype Resolve a = MkResolve (ReaderT Text (ExceptT ResolutionError IO) a)
+    deriving (Functor, Applicative, Monad, MonadError ResolutionError, MonadReader Text)
 
-resolve :: Program Parsed -> IO (Either ResolutionError (Program Resolved))
-resolve program = runResolve $ resolveProgram emptyEnv program
-  where
-    emptyEnv =
-        MkEnv
-            { namespace = program.namespace
-            , tags = mempty
-            , functions = mempty
-            , players = mempty
-            , objectives = mempty
-            , staged = mempty
-            }
+resolve :: Env -> Program Parsed -> IO (Either ResolutionError (Program Resolved, Env))
+resolve env program = runResolve program.namespace $ resolveProgram env program
 
-runResolve :: Resolve a -> IO (Either ResolutionError a)
-runResolve (MkResolve exceptT) =
-    runExceptT exceptT
+runResolve :: Text -> Resolve a -> IO (Either ResolutionError a)
+runResolve namespace (MkResolve transformerStack) =
+    runExceptT $ transformerStack `runReaderT` namespace
 
-resolveProgram :: Env -> Program Parsed -> Resolve (Program Resolved)
+resolveProgram :: Env -> Program Parsed -> Resolve (Program Resolved, Env)
 resolveProgram env program = do
-    (_env, declarations) <- mapAccumLM resolveDeclaration env program.declarations
+    (env, declarations) <- mapAccumLM resolveDeclaration env program.declarations
     pure
         ( MkProgram
             { namespace = program.namespace
+            , imports = coerce program.imports
             , declarations
             }
+        , env
         )
 
-makeNamespaced :: Env -> Text -> Resolve (Name Resolved)
-makeNamespaced env text = do
-    pure (NamespacedName{namespace = env.namespace, name = text})
+makeNamespaced :: Text -> Resolve (Name Resolved)
+makeNamespaced text = do
+    namespace <- ask
+    pure (NamespacedName{namespace, name = text})
 
 resolveDeclaration :: Env -> Declaration Parsed -> Resolve (Env, Declaration Resolved)
 resolveDeclaration env = \case
     DefineFunction name commands -> do
-        newName <- makeNamespaced env name
+        newName <- makeNamespaced name
         let envWithFunction = env{functions = insert name newName env.functions}
 
         commands <- traverse (resolveCommand envWithFunction) commands
 
         pure (envWithFunction, DefineFunction name commands)
     DefineTag{tagName, literal} -> do
-        newName <- makeNamespaced env tagName
+        newName <- makeNamespaced tagName
         let properties =
                 MkTagProperties
                     { isLiteral = literal
@@ -80,7 +114,7 @@ resolveDeclaration env = \case
         pure (envWithTag, DefineTag{tagName, literal})
     DefinePlayer player -> pure (env{players = Set.insert player env.players}, DefinePlayer player)
     DefineObjective{objectiveName, literal} -> do
-        newName <- makeNamespaced env objectiveName
+        newName <- makeNamespaced objectiveName
         let properties = MkObjectiveProperties{isLiteral = literal}
         let envWithObjective = env{objectives = insert objectiveName (newName, properties) env.objectives}
         pure (envWithObjective, DefineObjective{objectiveName = (newName, properties), literal})
@@ -90,7 +124,7 @@ resolveDeclaration env = \case
         target <- resolveScoreTarget env target
         objective <- resolveObjective env objective
 
-        functionName <- makeNamespaced env name
+        functionName <- makeNamespaced name
         let envWithFunction = env{functions = insert name functionName env.functions}
 
         -- We do allow the search tree body to mention itself
@@ -208,6 +242,14 @@ resolveSelectorArgument env = \case
     TagSelector name -> TagSelector <$> resolveTagName env name
     DistanceSelector range -> DistanceSelector <$> resolveRange env range
 
+resolveGenericLocalVar :: Maybe Text -> Env -> Text -> Resolve (GenericArgument Resolved)
+resolveGenericLocalVar importedNamespace env name = do
+    case lookup name env.tags of
+        Just tagName -> pure (GenericTag tagName)
+        Nothing -> case lookup name env.functions of
+            Just functionName -> pure (Named (functionName))
+            Nothing -> throwError (UndefinedGeneric importedNamespace name)
+
 resolveGenericArgument :: Env -> GenericArgument Parsed -> Resolve (GenericArgument Resolved)
 resolveGenericArgument env = \case
     Literal text -> pure $ Literal text
@@ -217,13 +259,11 @@ resolveGenericArgument env = \case
         pure (Lambda commands)
     GenericEntity entity -> GenericEntity <$> resolveEntity env entity
     Named (RawName name) -> pure $ Literal name
-    Named (NamespacedName{}) -> undefined
-    Named (LocalName name) -> do
-        case lookup name env.tags of
-            Just tagName -> pure (GenericTag tagName)
-            Nothing -> case lookup name env.functions of
-                Just functionName -> pure (Named (functionName))
-                Nothing -> throwError (UndefinedGeneric name)
+    Named (LocalName name) -> resolveGenericLocalVar Nothing env name
+    -- TODO: this doesn't work for the current namespace
+    Named (NamespacedName{namespace, name}) -> do
+        importedEnv <- envForNamespace namespace env
+        resolveGenericLocalVar (Just namespace) importedEnv name
 
 resolveRange :: Env -> Range Parsed -> Resolve (Range Resolved)
 resolveRange env (MkRange start end) =
@@ -247,29 +287,41 @@ resolveFunction env = \case
     FunctionName name -> FunctionName <$> resolveFunctionName env name
     FunctionLambda commands -> FunctionLambda <$> traverse (resolveCommand env) commands
 
+resolveLocalFunctionName :: Maybe Text -> Env -> Text -> Resolve (Name Resolved)
+resolveLocalFunctionName importedNamespace env name = case lookup name env.functions of
+    Nothing -> throwError (UndefinedFunction importedNamespace name)
+    Just name -> pure name
 resolveFunctionName :: Env -> Name Parsed -> Resolve (Name Resolved)
 resolveFunctionName env = \case
     RawName raw -> pure $ RawName raw
-    NamespacedName{} -> undefined
-    LocalName name -> case lookup name env.functions of
-        Nothing -> throwError (UndefinedFunction name)
-        Just name -> pure name
+    NamespacedName{namespace, name} -> do
+        importedEnv <- envForNamespace namespace env
+        resolveLocalFunctionName (Just namespace) importedEnv name
+    LocalName name -> resolveLocalFunctionName Nothing env name
 
+resolveLocalTagName :: Maybe Text -> Env -> Text -> Resolve (TagName Resolved)
+resolveLocalTagName importedNamespace env name = case lookup name env.tags of
+    Nothing -> throwError (UndefinedTag importedNamespace name)
+    Just name -> pure name
 resolveTagName :: Env -> TagName Parsed -> Resolve (TagName Resolved)
 resolveTagName env = \case
     RawName raw -> pure $ (RawName raw, MkTagProperties{isLiteral = False})
-    NamespacedName{} -> undefined
-    LocalName name -> case lookup name env.tags of
-        Nothing -> throwError (UndefinedTag name)
-        Just name -> pure name
+    NamespacedName{namespace, name} -> do
+        importedEnv <- envForNamespace namespace env
+        resolveLocalTagName (Just namespace) importedEnv name
+    LocalName name -> resolveLocalTagName Nothing env name
 
+resolveLocalObjective :: Maybe Text -> Env -> Text -> Resolve (ObjectiveName Resolved)
+resolveLocalObjective importedNamespace env name = case lookup name env.objectives of
+    Nothing -> throwError (UndefinedObjective importedNamespace name)
+    Just name -> pure name
 resolveObjective :: Env -> ObjectiveName Parsed -> Resolve (ObjectiveName Resolved)
 resolveObjective env = \case
     RawName raw -> pure $ (RawName raw, MkObjectiveProperties{isLiteral = False})
-    NamespacedName{} -> undefined
-    LocalName name -> case lookup name env.objectives of
-        Nothing -> throwError (UndefinedObjective name)
-        Just name -> pure name
+    NamespacedName{namespace, name} -> do
+        importedEnv <- envForNamespace namespace env
+        resolveLocalObjective (Just namespace) importedEnv name
+    LocalName name -> resolveLocalObjective Nothing env name
 
 resolvePlayerName :: Env -> PlayerName -> Resolve PlayerName
 resolvePlayerName env playerName = case playerName of

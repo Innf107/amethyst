@@ -91,18 +91,35 @@ integer = do
         Nothing -> pure (read digits)
         Just _ -> pure (-(read digits))
 
+namespaceIdent :: Parser Text
+namespaceIdent =
+    label "namespace" $ spaces *> do
+        first <- letterChar <|> oneOf @[] "_"
+        rest <- many (alphaNumChar <|> oneOf @[] "_.")
+        pure (toText (first : rest))
+
 program :: Parser (Program Parsed)
 program = do
     keyword "namespace"
-    namespace <- ident
+    namespace <- namespaceIdent
     semi
-    declarations <- declaration `sepByTrailing` semi
+
+    imports <- fromList <$> import_ `sepByTrailing` semi
+
+    declarations <- fromList <$> declaration `sepByTrailing` semi
     eof
     pure
         $ MkProgram
             { namespace
-            , declarations = fromList declarations
+            , imports
+            , declarations
             }
+
+import_ :: Parser (Import Parsed)
+import_ = do
+    keyword "import"
+    targetFile <- quoted
+    pure (Import{targetFile})
 
 declaration :: Parser (Declaration Parsed)
 declaration =
@@ -146,7 +163,7 @@ defineObjective = do
 
 defineSearchTree :: Parser (Declaration Parsed)
 defineSearchTree = do
-    keyword "search_tree"
+    keyword "searchtree"
     functionName <- ident
     keyword "("
     rangeStart <- staged
@@ -252,8 +269,8 @@ executeClause = do
 
 storeLocation :: Parser (StoreLocation Parsed)
 storeLocation = do
-    choice [
-        keyword "score" >> do
+    choice
+        [ keyword "score" >> do
             target <- scoreTarget
             objective <- name
             pure (StoreScore target objective)
@@ -423,16 +440,16 @@ name :: Parser (Name Parsed)
 name = label "name" do
     choice @[]
         [ RawName <$> quoted
+        , try do
+            spaces
+            namespace <- namespaceIdent
+            _ <- chunk ":"
+            name <- identNoSpaces
+            spaces
+            pure (NamespacedName namespace name)
         , do
-            spaces
-            firstName <- identNoSpaces
-            rest <- optional do
-                _ <- chunk ":"
-                identNoSpaces
-            spaces
-            case rest of
-                Nothing -> pure (LocalName firstName)
-                Just secondName -> pure (NamespacedName firstName secondName)
+            name <- ident
+            pure (LocalName name)
         ]
 
 -- TODO: string escapes

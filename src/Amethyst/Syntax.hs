@@ -5,6 +5,7 @@ module Amethyst.Syntax (
     Name (..),
     TagName,
     Program (..),
+    Import(..),
     Declaration (..),
     Command (..),
     Function (..),
@@ -69,8 +70,11 @@ type family PassSpecific pass parsed resolved where
 
 data Program (p :: Pass) = MkProgram
     { namespace :: Text
+    , imports :: Seq (Import p)
     , declarations :: Seq (Declaration p)
     }
+
+data Import p = Import {targetFile :: Text}
 
 data Declaration (p :: Pass)
     = DefineFunction Text (Seq (Command p))
