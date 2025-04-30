@@ -21,6 +21,8 @@ dependencies:
 - directory
 - filepath
 - megaparsec
+- ki
+- async
 
 ghc-options:
 - -Wall

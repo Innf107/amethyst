@@ -1,20 +1,32 @@
-module Amethyst.Compile (runCompile) where
+module Amethyst.Compile (compileProgram, CompilationState, initialCompilationState, finishCompilation) where
 
 import Relude hiding (Ordering (..))
 import Relude.Extra
 
 import Amethyst.Syntax
 
+import Data.Map qualified as Map
 import Data.Sequence ((<|))
+import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Unique
 import System.FilePath ((</>))
 
--- TODO: use a proper text builder that isn't quadratic
+data CompilationState = MkCompilationState
+    { initializationLines :: TVar (Map Text (TVar [Text]))
+    , namespaces :: TVar (Set Text)
+    }
+
+initialCompilationState :: IO CompilationState
+initialCompilationState = do
+    initializationLines <- atomically $ newTVar mempty
+    namespaces <- atomically $ newTVar mempty
+    pure (MkCompilationState{initializationLines, namespaces})
+
 data CompileEnv = MkCompileEnv
     { fileWriter :: FilePath -> Text -> IO ()
     , namespace :: Text
-    , initializationFileContents :: IORef Text
+    , compilationState :: CompilationState
     , stagedValues :: Map Text StagedValue
     }
 
@@ -41,22 +53,31 @@ freshName base = MkCompile do
     unique <- liftIO newUnique
     pure (NamespacedName{namespace, name = base <> "_" <> show (hashUnique unique)})
 
-runCompile :: Program Resolved -> (FilePath -> Text -> IO ()) -> IO ()
-runCompile program fileWriter = do
-    initializationFileContents <- newIORef ""
+compileProgram :: Program Resolved -> CompilationState -> (FilePath -> Text -> IO ()) -> IO ()
+compileProgram program compilationState fileWriter = do
     let env =
             MkCompileEnv
                 { fileWriter
                 , namespace = program.namespace
-                , initializationFileContents
+                , compilationState
                 , stagedValues = mempty
                 }
     let (MkCompile readerT) = compile program
 
     readerT `runReaderT` env
-    finalInitFile <- readIORef initializationFileContents
-    fileWriter ("data" </> toString program.namespace </> "function/init.mcfunction") finalInitFile
-    fileWriter ("data/minecraft/tags/function/load.json") ("{\"values\":[\"" <> program.namespace <> ":init\"]}")
+    atomically $ modifyTVar' compilationState.namespaces (Set.insert program.namespace)
+
+finishCompilation :: CompilationState -> (FilePath -> Text -> IO ()) -> IO ()
+finishCompilation state fileWriter = do
+    initializationLines <- atomically $ readTVar state.initializationLines
+    namespaces <- atomically $ readTVar state.namespaces
+
+    for_ (Map.toList initializationLines) \(namespace, lineVar) -> do
+        lines <- atomically $ readTVar lineVar
+        fileWriter ("data" </> toString namespace </> "function/init.mcfunction") (Text.unlines lines)
+
+    for_ namespaces \namespace -> do
+        fileWriter ("data/minecraft/tags/function/load.json") ("{\"values\":[\"" <> namespace <> ":init\"]}")
 
 data StagedValue
     = StagedIntV Integer
@@ -70,8 +91,16 @@ emitNamespacedFile file contents = MkCompile do
 
 emitInitCommand :: Text -> Compile ()
 emitInitCommand command = MkCompile do
-    MkCompileEnv{initializationFileContents} <- ask
-    modifyIORef' initializationFileContents (<> command <> "\n")
+    MkCompileEnv{namespace, compilationState} <- ask
+    initializationLines <- atomically $ do
+        map <- readTVar compilationState.initializationLines
+        case lookup namespace map of
+            Just initializationLines -> pure initializationLines
+            Nothing -> do
+                initializationLines <- newTVar []
+                writeTVar compilationState.initializationLines (insert namespace initializationLines map)
+                pure initializationLines
+    atomically $ modifyTVar' initializationLines (command :)
 
 compile :: Program Resolved -> Compile ()
 compile program = do
@@ -244,7 +273,6 @@ compileStoreLocation = \case
         target <- compileScoreTarget target
         let objective = renderObjectiveName objectiveName
         pure ("score " <> target <> " " <> objective)
-
 
 compileIfCondition :: IfCondition Resolved -> Compile Text
 compileIfCondition = \case

@@ -8,12 +8,16 @@ import Relude
 import System.IO (hPutStrLn)
 
 import Amethyst.Resolve (includeImportedEnv)
+import Ki qualified as Ki
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath (takeDirectory)
 import Text.Megaparsec (errorBundlePretty)
+import Control.Concurrent.Async (mapConcurrently)
 
 data CompilationOptions = CompilationOptions
     { writeOutput :: FilePath -> Text -> IO ()
+    , scope :: Ki.Scope
+    , compilationState :: Compile.CompilationState
     }
 
 -- TODO: treat relative files correctly
@@ -27,7 +31,7 @@ compileModuleAt options filePath = do
             exitFailure
         Right program -> pure program
 
-    environments <- traverse (\import_ -> compileModuleAt options (toString import_.targetFile)) parsedProgram.imports
+    environments <- mapConcurrently (\import_ -> compileModuleAt options (toString import_.targetFile)) parsedProgram.imports
 
     let recursivelyResolvedEnv =
             foldl'
@@ -39,9 +43,8 @@ compileModuleAt options filePath = do
         Resolve.resolve recursivelyResolvedEnv parsedProgram >>= \case
             Left err -> error (show err)
             Right program -> pure program
-    -- TODO: might be a nice place for parallelism where we could spark off a self-contained compile job
-    -- while the rest is still resolving?
-    Compile.runCompile resolvedProgram options.writeOutput
+
+    _ <- Ki.fork options.scope $ Compile.compileProgram resolvedProgram options.compilationState options.writeOutput
     pure (resolvedEnv, resolvedProgram.namespace)
 
 main :: IO ()
@@ -52,10 +55,18 @@ main =
                     putStrLn ("Writing function: " <> filePath)
 
                     createDirectoryIfMissing True (takeDirectory filePath)
+
                     writeFileText filePath contents
-            let compilationOptions = CompilationOptions{writeOutput}
-            _ <- compileModuleAt compilationOptions amethystFile
-            pure ()
+                    pure ()
+
+            compilationState <- Compile.initialCompilationState
+            
+            Ki.scoped \scope -> do
+                let compilationOptions = CompilationOptions{writeOutput, compilationState, scope}
+                _ <- compileModuleAt compilationOptions amethystFile
+                atomically $ Ki.awaitAll scope
+            
+            Compile.finishCompilation compilationState writeOutput
         _ -> do
             hPutStrLn stderr "usage: amethyst <FILE>"
             exitFailure

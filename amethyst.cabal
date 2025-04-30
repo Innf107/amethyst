@@ -53,10 +53,12 @@ library
       PatternSynonyms
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing -Werror=incomplete-patterns
   build-depends:
-      base >=4.7 && <5
+      async
+    , base >=4.7 && <5
     , containers
     , directory
     , filepath
+    , ki
     , megaparsec
     , mtl
     , relude
@@ -89,10 +91,12 @@ executable amethyst
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing -Werror=incomplete-patterns -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       amethyst
+    , async
     , base >=4.7 && <5
     , containers
     , directory
     , filepath
+    , ki
     , megaparsec
     , mtl
     , relude
@@ -126,10 +130,12 @@ test-suite amethyst-test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-name-shadowing -Werror=incomplete-patterns -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       amethyst
+    , async
     , base >=4.7 && <5
     , containers
     , directory
     , filepath
+    , ki
     , megaparsec
     , mtl
     , relude
