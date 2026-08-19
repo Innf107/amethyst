@@ -83,10 +83,10 @@ finishCompilation state fileWriter = do
                     Nothing -> do
                         lines <- newTVar ["function " <> renderName name]
                         writeTVar state.initializationLines (insert namespace lines namespaceMap)
-        name -> error $ "invalid non-namespaced name as init function " <> renderName name
+        name -> error $ "invalid non-namespaced name as load function " <> renderName name
     initializationLines <- atomically $ readTVar state.initializationLines
 
-    let initFile namespace = "data" </> toString namespace </> "function/__init.mcfunction"
+    let initFile namespace = "data" </> toString namespace </> "function/__load.mcfunction"
 
     for_ (Map.toList initializationLines) \(namespace, lineVar) -> do
         lines <- atomically $ readTVar lineVar
@@ -95,7 +95,7 @@ finishCompilation state fileWriter = do
         fileWriter (initFile namespace) (Text.unlines (reverse lines))
 
     for_ namespaces \namespace -> do
-        fileWriter ("data/minecraft/tags/function/load.json") ("{\"values\":[\"" <> namespace <> ":__init\"]}")
+        fileWriter ("data/minecraft/tags/function/load.json") ("{\"values\":[\"" <> namespace <> ":__load\"]}")
 
 data StagedValue
     = StagedIntV Integer
@@ -191,7 +191,7 @@ compileNewFunction name commands = do
 
 compileNewRawFunction :: Name Resolved -> Text -> Compile ()
 compileNewRawFunction name commands = do
-    when (name.name == "init") do
+    when (name.name == "load") do
         MkCompileEnv{compilationState = MkCompilationState{userInitFunctions}} <- ask
         atomically $ modifyTVar' userInitFunctions (name :)
     emitNamespacedFile ("function" </> toString name.name <> ".mcfunction") commands
