@@ -344,6 +344,11 @@ scoreboardCommand = do
                     objective <- name
                     value <- staged
                     pure (ScoreboardPlayersAdd target objective value)
+                , keyword "remove" >> do
+                    target <- scoreTarget
+                    objective <- name
+                    value <- staged
+                    pure (ScoreboardPlayersRemove target objective value)
                 , keyword "operation" >> do
                     target1 <- scoreTarget
                     objective1 <- name

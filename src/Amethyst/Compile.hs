@@ -14,14 +14,16 @@ import System.FilePath ((</>))
 
 data CompilationState = MkCompilationState
     { initializationLines :: TVar (Map Text (TVar [Text]))
+    , userInitFunctions :: TVar [Name Resolved]
     , namespaces :: TVar (Set Text)
     }
 
 initialCompilationState :: IO CompilationState
 initialCompilationState = do
     initializationLines <- atomically $ newTVar mempty
+    userInitFunctions <- atomically $ newTVar mempty
     namespaces <- atomically $ newTVar mempty
-    pure (MkCompilationState{initializationLines, namespaces})
+    pure (MkCompilationState{initializationLines, userInitFunctions, namespaces})
 
 data CompileEnv = MkCompileEnv
     { fileWriter :: FilePath -> Text -> IO ()
@@ -31,7 +33,7 @@ data CompileEnv = MkCompileEnv
     }
 
 newtype Compile a = MkCompile (ReaderT CompileEnv IO a)
-    deriving newtype (Functor, Applicative, Monad)
+    deriving newtype (Functor, Applicative, Monad, MonadReader CompileEnv, MonadIO)
 
 stagedEnv :: Compile (Map Text StagedValue)
 stagedEnv = MkCompile $ do
@@ -69,15 +71,31 @@ compileProgram program compilationState fileWriter = do
 
 finishCompilation :: CompilationState -> (FilePath -> Text -> IO ()) -> IO ()
 finishCompilation state fileWriter = do
-    initializationLines <- atomically $ readTVar state.initializationLines
     namespaces <- atomically $ readTVar state.namespaces
+
+    userInitFunctions <- atomically $ readTVar state.userInitFunctions
+    for_ userInitFunctions \case
+        name@NamespacedName{namespace} -> do
+            atomically $ do
+                namespaceMap <- readTVar state.initializationLines
+                case lookup namespace namespaceMap of
+                    Just functions -> modifyTVar' functions (("function " <> renderName name) :)
+                    Nothing -> do
+                        lines <- newTVar ["function " <> renderName name]
+                        writeTVar state.initializationLines (insert namespace lines namespaceMap)
+        name -> error $ "invalid non-namespaced name as init function " <> renderName name
+    initializationLines <- atomically $ readTVar state.initializationLines
+
+    let initFile namespace = "data" </> toString namespace </> "function/__init.mcfunction"
 
     for_ (Map.toList initializationLines) \(namespace, lineVar) -> do
         lines <- atomically $ readTVar lineVar
-        fileWriter ("data" </> toString namespace </> "function/init.mcfunction") (Text.unlines lines)
+        -- we need to write them in reverse since we cons onto the list but want the last lines added
+        -- to appear *last*
+        fileWriter (initFile namespace) (Text.unlines (reverse lines))
 
     for_ namespaces \namespace -> do
-        fileWriter ("data/minecraft/tags/function/load.json") ("{\"values\":[\"" <> namespace <> ":init\"]}")
+        fileWriter ("data/minecraft/tags/function/load.json") ("{\"values\":[\"" <> namespace <> ":__init\"]}")
 
 data StagedValue
     = StagedIntV Integer
@@ -173,6 +191,9 @@ compileNewFunction name commands = do
 
 compileNewRawFunction :: Name Resolved -> Text -> Compile ()
 compileNewRawFunction name commands = do
+    when (name.name == "init") do
+        MkCompileEnv{compilationState = MkCompilationState{userInitFunctions}} <- ask
+        atomically $ modifyTVar' userInitFunctions (name :)
     emitNamespacedFile ("function" </> toString name.name <> ".mcfunction") commands
 
 compileCommand :: Command Resolved -> Compile Text
@@ -214,6 +235,11 @@ compileCommand = \case
         objective <- pure $ renderObjectiveName objective
         value <- compileStaged value
         pure $ "scoreboard players add " <> target <> " " <> objective <> " " <> value
+    ScoreboardPlayersRemove target objective value -> do
+        target <- compileScoreTarget target
+        objective <- pure $ renderObjectiveName objective
+        value <- compileStaged value
+        pure $ "scoreboard players remove " <> target <> " " <> objective <> " " <> value
     ScoreboardPlayersOperation target1 objective1 operation target2 objective2 -> do
         target1 <- compileScoreTarget target1
         objective1 <- pure $ renderObjectiveName objective1

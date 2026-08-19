@@ -172,6 +172,11 @@ resolveCommand env = \case
         objective <- resolveObjective env objective
         value <- resolveStaged env IntT value
         pure (ScoreboardPlayersAdd target objective value)
+    ScoreboardPlayersRemove target objective value -> do
+        target <- resolveScoreTarget env target
+        objective <- resolveObjective env objective
+        value <- resolveStaged env IntT value
+        pure (ScoreboardPlayersRemove target objective value)
     ScoreboardPlayersOperation target1 objective1 operation target2 objective2 -> do
         target1 <- resolveScoreTarget env target1
         objective1 <- resolveObjective env objective1
